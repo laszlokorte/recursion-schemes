@@ -547,6 +547,126 @@ console.log(reduceOfLinkedList((a,b) => `${a} :: ${b}`, () => 'NIL', linkedList)
 	Instead of passing a single binary function and an initial value to each reducer we pass a specific function for each recursion case that might occur. Notice how <code>reduceOfTreeWithInner</code> now expects 3 functions, one for handling the empty leaf case, one for handling the single value leaf case and one for handling the inner node with two children an a value case. The latter one taking 3 instead of two arguments. 
 </p>
 
+<p>
+	But now the interfaces of the <code>reduce</code> function differ between each of the 3 data structures. It would be preferable if we could provide a common reduction interface for all three (and future) datatypes, the same way as the <code>map</code> function is typically defined for all kinds of datatypes in a uniform way. Lets try:
+</p>
+
+
+<script type="text/javascript+notebook-cell" data-autorun="true">
+function reduceOfTreeLeaf(handleCases, tree) {
+	if(tree.hasOwnProperty("value")) {
+		return handleCases(tree)
+	} else {
+		return handleCases({
+			left: reduceOfTreeLeaf(handleCases, tree.left),
+			right: reduceOfTreeLeaf(handleCases, tree.right),
+		})
+	}
+}
+
+function reduceOfTreeWithInner(handleCases, tree) {
+	if(tree.hasOwnProperty("nil")) {
+		return handleCases(tree)
+	} else if(tree.hasOwnProperty("left") && tree.hasOwnProperty("right")) {
+		return handleCases({
+			value: tree.value, 
+			left: reduceOfTreeWithInner(handleCases, tree.left),
+			right: reduceOfTreeWithInner(handleCases, tree.right),
+		})
+	} else {
+		return handleCases(tree)
+	}
+}
+
+function reduceOfLinkedList(handleCases, list) {
+	if(list.hasOwnProperty("nil")) {
+		return handleCases(list)
+	} else {
+		return handleCases({
+			head: list.head,
+			tail: reduceOfLinkedList(handleCases, list.tail)
+		})
+	}
+}
+
+console.log(reduceOfTreeLeaf((t) => {
+	if(t.hasOwnProperty("value")) {
+		return t.value
+	} else {
+		return t.left + t.right
+	}
+}, binaryTreeWithDataInLeafs))
+console.log(reduceOfTreeWithInner((t) => {
+	if(t.hasOwnProperty("nil")) {
+		return 0
+	} else if(t.hasOwnProperty("left") && t.hasOwnProperty("left")) {
+		return t.value + t.left + t.right
+	} else {
+		return t.value
+	}
+}, binaryTreeWithInnerData))
+console.log(reduceOfLinkedList((l) => {
+	if(l.hasOwnProperty("nil")) {
+		return 0
+	} else {
+		return l.head + l.tail
+	}
+}
+, linkedList))
+
+console.log(reduceOfTreeLeaf((t) => {
+	if(t.hasOwnProperty("value")) {
+		return t.value
+	} else {
+		return t.left * t.right
+	}
+}, binaryTreeWithDataInLeafs))
+console.log(reduceOfTreeWithInner((t) => {
+	if(t.hasOwnProperty("nil")) {
+		return 1
+	} else if(t.hasOwnProperty("left") && t.hasOwnProperty("left")) {
+		return t.value * t.left * t.right
+	} else {
+		return t.value
+	}
+}, binaryTreeWithInnerData))
+console.log(reduceOfLinkedList((l) => {
+	if(l.hasOwnProperty("nil")) {
+		return 1
+	} else {
+		return l.head * l.tail
+	}
+}
+, linkedList))
+
+
+console.log(reduceOfTreeLeaf((t) => {
+	if(t.hasOwnProperty("value")) {
+		return t.value
+	} else {
+		return "<"+t.left + ":" +  t.right +">"
+	}
+}, binaryTreeWithDataInLeafs))
+console.log(reduceOfTreeWithInner((t) => {
+	if(t.hasOwnProperty("nil")) {
+		return "!"
+	} else if(t.hasOwnProperty("left") && t.hasOwnProperty("left")) {
+		return "<" + t.left + ":" + t.value + ":" + t.right + ">"
+	} else {
+		return t.value
+	}
+}, binaryTreeWithInnerData))
+console.log(reduceOfLinkedList((l) => {
+	if(l.hasOwnProperty("nil")) {
+		return "NIL"
+	} else {
+		return l.head + " :: " + l.tail
+	}
+}
+, linkedList))
+</script>
+
+
 
 <script type="text/javascript+notebook-cell" data-autorun="true">
 export const someNumberArray = [1,2,3,4]
