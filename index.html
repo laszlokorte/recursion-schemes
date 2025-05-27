@@ -497,6 +497,269 @@ console.log(stringOfLinkedListReduce(anaMorphism(rangeLinkedList, mapPatternLink
 console.log(hyloMorphism(sumPatternLinkedList, rangeLinkedList, mapPatternLinkedList)(100))
 </script>
 
+<script type="text/javascript+notebook-cell" data-autorun="true">
+const TreeF = Object.create({
+  get isLeaf() {return this.type === 'Leaf'},
+  get isNode() { return this.type === 'Node'},
+  
+  fmap (f) {
+    if (this.isLeaf) {
+      return TreeLeaf();
+    } else if (this.isNode) {
+      return TreeNode(this.value, f(this.left), f(this.right));
+    }
+  }, 
+
+  toString() {
+    return cata(treeConcatAlgebra)(this)
+  }
+})
+
+const TreeLeaf = () => Object.create(TreeF, { type: {value: 'Leaf', writable: false} });
+const TreeNode = (value, left = TreeLeaf(), right = TreeLeaf()) => Object.create(TreeF, { 
+	type: {value: 'Node', writable: false},  
+	value: {value: value, writable: false},  
+	left: {value: left, writable: false}, 
+	right: {value: right, writable: false} 
+});
+
+
+const ListF = Object.create({
+  get isNil() {return this.type === 'Nil'},
+  get isCons() { return this.type === 'Cons'},
+      
+  fmap (f) {
+    if (this.isNil) {
+      return ListNil;
+    } else if (this.isCons) {
+      return ListCons(this.value, f(this.tail));
+    }
+  },
+
+  toString() {
+    return cata(listConcatAlgebra)(this)
+  }
+})
+
+
+const ListNil = Object.create(ListF, { type:  {value: 'Nil', writable: false} });
+const ListCons = (value, tail) => Object.create(ListF, { type: {value: 'Cons', writable: false}, value:  {value, writable: false}, tail:  {value: tail, writable: false} });
+
+
+const cata = (algebra) => {
+  const go = (term) => algebra(term.fmap(go));
+  return go;
+};
+
+const ana = (coalgebra) => {
+  const go = (seed) => coalgebra(seed).fmap(go);
+  return go;
+};
+
+const hylo = (algebra, coalgebra) => {
+  const go = (seed) => algebra(coalgebra(seed).fmap(go));
+  return go;
+};
+
+const para = (algebra) => {
+  const go = (term) => algebra(term.fmap(sub => [go(sub), sub]));
+  return go;
+};
+
+const apo = (coalgebra) => {
+  // Note: apo needs a convention like { isFix: true, value: term } to mark early-exits.
+  const go = (seed) => {
+    const layer = coalgebra(seed);
+    return layer.fmap(e => e instanceof Object && e.isFix ? e.value : go(e));
+  };
+  return (seed) => ({ isFix: true, value: go(seed) }); // mimic Fix without wrapper
+};
+
+const zygo = (f, g) => {
+  const go = (term) => {
+    const pair = term.fmap(go);
+    const b = g(pair.map(([_, b]) => b));
+    const a = f(pair.map(([a, _]) => a), b);
+    return [a, b];
+  };
+  return (term) => go(term)[0];
+};
+
+const chrono = (f, g) => {
+  const go = (seed) => {
+    const layer = g(seed); // coalgebra: g :: a -> F (a, b)
+    const mapped = layer.fmap(([a, b]) => {
+      const [v, memo] = go(a);
+      return [v, b]; // use memo
+    });
+    const value = f(mapped);
+    return [value, null]; // ignore second if needed
+  };
+  return (seed) => go(seed)[0];
+};
+
+const histo = (algebra) => {
+  const go = (term) => {
+    const cache = term.fmap(go);
+    const result = algebra(cache);
+    return { result, cache }; // tie the knot
+  };
+  return (term) => go(term).result;
+};
+
+const futu = (coalgebra) => {
+  const go = (seed) => {
+    const layer = coalgebra(seed);
+    return layer.fmap(go);
+  };
+  return go;
+};
+
+const treeSumAlgebra = (node) => {
+  if (node.isLeaf) {
+    return 0;
+  } else if (node.isNode) {
+    return  node.value + node.left + node.right;
+  }
+};
+
+const treeConcatAlgebra = (node) => {
+  if (node.isLeaf) {
+    return '*';
+  } else if (node.isNode) {
+    return "("+node.left + " < " + node.value.toString()  + " > "  + node.right+")";
+  }
+};
+
+
+const listSumAlgebra = (node) => {
+  if (node.isCons) {
+    return node.value + node.tail
+  } else if (node.isNil) {
+    return 0
+  }
+};
+
+const listConcatAlgebra = (node) => {
+  if (node.isCons) {
+    return node.value + " :: " +  node.tail
+  } else if (node.isNil) {
+    return "NIL"
+  }
+};
+
+
+const treeMaxAlgebra = (init = -Infinity) =>  (node) => {
+  if (node.isLeaf) {
+    return init;
+  } else if (node.isNode) {
+    return Math.max(node.value, node.left, node.right);
+  } 
+};
+
+const listMaxAlgebra = (init = -Infinity) => (node) => {
+  if (node.isCons) {
+    return Math.max(node.value, node.tail)
+  } else if (node.isNil) {
+    return init
+  }
+};
+
+const myListCoAlgebra = (x) => {
+  return x > 0 ? ListCons(x, x-1) : ListNil
+}
+
+const myTreeCoAlgebra =  (x) => {
+  return x > 0 ? TreeNode(x, x-1, x-1) : TreeLeaf()
+}
+
+const listMapAlgebra = (f) => (node) => {
+  if (node.isNil) return ListNil;
+  if (node.isCons) return ListCons(f(node.value), node.tail);
+}
+
+const treeMapAlgebra = (f) => (node) => {
+  if (node.isLeaf) {
+    return TreeLeaf();
+  } else if (node.isNode) {
+    return TreeNode(f(node.value), node.left, node.right)
+  }
+}
+
+const annotateListLength = (node) => {
+  if (node.isNil) {
+    return ListNil;
+  }
+
+  const head = node.value;
+  const [recurResult, originalTail] = node.tail;
+  
+  const len = recurResult.isCons
+    ? recurResult.value[1] + 1
+    : 1;
+
+  return ListCons([head, len], recurResult);
+};
+
+const reverseListAlgebra = (node) =>
+  node.isNil
+    ? (acc) => acc
+    : (acc) => node.tail(ListCons(node.value, acc));
+
+function getArrowFunctionBody(f) {
+	const matches = f.toString().match(/^(?:\s*\(?(?:\s*\w*\s*,?\s*)*\)?\s*?=>\s*){?([\s\S]*)}?$/);
+	if (!matches) {
+	return null;
+	}
+
+	const firstPass = matches[1];
+
+	// Needed because the RegExp doesn't handle the last '}'.
+	const secondPass =
+	(firstPass.match(/{/g) || []).length === (firstPass.match(/}/g) || []).length - 1 ?
+	  firstPass.slice(0, firstPass.lastIndexOf('}')) :
+	  firstPass
+
+	return secondPass;
+}
+	
+const l = ListCons(8, ListCons(3, ListCons(7, ListNil)))
+const t = TreeNode(0, TreeNode(0, TreeNode(3), TreeNode(4)), TreeNode(10, TreeNode(2), TreeNode(1)))
+const examples = [
+	() => (l.toString()),
+	() => (t.toString()),
+	
+	() => (cata(reverseListAlgebra)(l)(ListNil)),
+	 
+	() => (cata(listSumAlgebra)(l)),
+	() => (cata(treeSumAlgebra)(t)),
+	() => (cata(listMaxAlgebra())(l)),
+	() => (cata(treeMaxAlgebra())(t)),
+	
+	() => (ana(myListCoAlgebra)(10).toString()),
+	() => (ana(myTreeCoAlgebra)(3).toString()),
+	
+	() => (hylo(listSumAlgebra, myListCoAlgebra)(10)),
+		
+	() => (hylo(
+		(node) => node.isNil ? 0 : node.value + node.tail, 
+		(x) => x < 1 ? ListNil : ListCons(x, x-1)
+	)(100)),
+	
+	() => (cata(listMapAlgebra(x => x * 2))(l).toString()),
+	() => (cata(treeMapAlgebra(x => x * 1))(t).toString()),
+	() => (cata(treeMapAlgebra(x => x * 2))(t).toString()),
+	
+	() => (para(annotateListLength)(l).toString()),
+	
+	() => (listMapAlgebra(([a,b]) => a*b)(para(annotateListLength)(l)).toString()),
+]
+
+for(let e of examples) {
+	console.log(getArrowFunctionBody(e).trim(), e())
+}
+</script>
+
 <h2>References</h2>
 
 
