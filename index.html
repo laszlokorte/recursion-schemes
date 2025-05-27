@@ -24,20 +24,529 @@ a {
 <h1><img src="favicon.svg" alt="" style="height: 1em; vertical-align: text-bottom;"> Recursion Schemes</h1>
 
 <p>
-	This is a simple introduction to recursion schemes.
+	This is a simple and practical introduction to recursion schemes in functional programming.
+</p>
+
+
+<p>
+	Recursion schemes are a technique in functional programming to construct recursive functions via composition of predefined patterns instead of writing the recursive function body by hand.  
+</p>
+
+<h2>Motivation</h2>
+
+Before we start lets build up some motivation by comparion to <code>for</code>-loops and higher order functions like <code>map</code> and <code>filter</code>.
+
+<h3><code>while</code>- and <code>for</code>-loop</h3>
+
+<p>
+	If you are familiar with <code>for</code>-loops and <code>while</code>-loops in procedural programming you can think of recursion schemes as corresponding to handwritten recursion the same way that <code>for</code>- or <code>foreach</code>- loops correspond to <code>while</code>-loops or <code>goto</code> statements. 
+</p>
+
+<script type="text/javascript+notebook-cell" data-autorun="true">
+// A function to sum all numbers from 0 to n (inclusive)
+function sumUpToWhile(n) {
+	let result = 0;
+	let counter = 0;
+	while(counter <= n) {
+		result += counter
+		counter++
+	}
+
+	return result
+}
+
+console.log(sumUpToWhile(10))
+</script>
+
+<script type="text/javascript+notebook-cell" data-autorun="true">
+// A function to sum all numbers from 0 to n (inclusive)
+function sumUpToFor(n) {
+	let result = 0;
+	
+	// The intent of counting from 0 to n is expressed
+	// more clearly
+	for(let counter=0;counter<=n;counter++) {
+		result += counter
+	}
+
+	return result
+}
+
+console.log(sumUpToFor(10))
+</script>
+
+
+
+<p>
+	<code>while</code>-loops and <code>goto</code>-statements allow unbounded repeatition and unrestricted branching of the control flow of a program. By using a <code>for</code>-loop you recognize that in many cases you do not need the unbounded freedom of a <code>while</code> loop but instead want the repeatition to happen a predetermined number of times. Every for-loop could in principle also be written as while loop and every while loop could be written via goto statements. But by using a for-loop the intent of iterating a fixed number of times while keeping track of a iteration counter is expressed more clearly and common mistakes like off-by-one errors are easier to be spotted. 
 </p>
 
 <p>
-	Recursion schemes are a generalization of common patterns of recursion.
+	You may also be familiar with functions like <code>map</code>, <code>filter</code> and <code>reduce</code>. These higher order functions have their origins in functional programming but are now also available in many procedural and object oriented languages. 
 </p>
 
 <p>
-	If you have used <code>Array.map</code>, <code>Array.filter</code> or <code>Array.reduce</code> you are already familiar with higher order functions in which you only specify what to do to each element of an array but not how to iterate the array.
+	They can be seen as an additional abstraction beyond <code>for</code> and <code>foreach</code> loops in that they hide the ceremony of iterating, incrementing counters and accumulating a result. The <code>map</code> function expresses the the intent of transforming each element of a collection and gathering all the results into a new collection of the same size as the original collection. The <code>filter</code> function expresses the intent to select only a subset of elements from a collection but keeping each of the selected elements as is. The <code>reduce</code> function expresses the intent to caculate a single summarizing value from all of the elements in a collection. 
+</p>
+
+<script type="text/javascript+notebook-cell" data-autorun="true">
+function doubleEachNumberWhile(array) {
+	const result = []
+	let index = 0
+
+	while(index<array.length) {
+		result.push(array[index] * 2)
+		index++
+	}
+
+	return result
+}
+
+console.log(doubleEachNumberWhile([5,7,9]))
+</script>
+
+<script type="text/javascript+notebook-cell" data-autorun="true">
+function doubleEachNumberFor(array) {
+	const result = []
+
+	for(let index = 0;index<array.length;index++) {
+		result.push(array[index] * 2)
+	}
+
+	return result
+}
+
+console.log(doubleEachNumberFor([5,7,9]))
+</script>
+
+<script type="text/javascript+notebook-cell" data-autorun="true">
+function doubleEachNumberForOf(array) {
+	const result = []
+
+	for(let element of array) {
+		result.push(element * 2)
+	}
+
+	return result
+}
+
+console.log(doubleEachNumberForOf([5,7,9]))
+</script>
+
+<script type="text/javascript+notebook-cell" data-autorun="true">
+function doubleEachNumberMap(array) {
+	return array.map((x) => x*2)
+}
+
+console.log(doubleEachNumberMap([5,7,9]))
+</script>
+
+
+<p>
+	Each of the goals of <code>map</code>, <code>filter</code> and <code>reduce</code> could also be achieved via a handwritten <code>while</code> or <code>for</code> loop. The advantage of using predefined functions in each case is to express the intent for clearly, communicating expactations and guarantees and by doing so preventing common mistakes.
 </p>
 
 <p>
-	TBD
+	Take a look at the following implemention and guess what will be the result.
 </p>
+
+<script type="text/javascript+notebook-cell" data-autorun="false">
+function doubleEachNumberWTF(array) {
+	const result = []
+
+	for(let element of array) {
+		result.push(0, element * 2)
+	}
+
+	return result
+}
+
+// What will this return?
+console.log(doubleEachNumberWTF([5,7,9]))
+</script>
+
+<p>
+	Did you catch the mistake? Maybe you did, but you might agree that mixing the responsibility of multiplying an element by two and collecting all the results into a single function makes it hard to track what exactly is happening an how the result will look like.
+</p>
+
+<p>
+	Lets take a look at at few typical recursive functions:
+</p>
+
+<script type="text/javascript+notebook-cell" data-autorun="true">
+function factorialRec(n) {
+	if(n<2) {
+		return 1
+	} else {
+		return n * factorialRec(n-1)
+	}
+}
+
+console.log(factorialRec(10))
+</script>
+
+<script type="text/javascript+notebook-cell" data-autorun="true">
+function factorialRecAcc(n, acc) {
+	if(n<2) {
+		return acc
+	} else {
+		return factorialRecAcc(n-1, acc*n)
+	}
+}
+
+console.log(factorialRecAcc(10, 0))
+</script>
+
+<script type="text/javascript+notebook-cell" data-autorun="true">
+function sumUpTo(n) {
+	if(n < 1) {
+		return 0
+	} else {
+		return sumUpTo(n-1) + n
+	}
+}
+
+console.log(sumUpTo(10))
+</script>
+
+<script type="text/javascript+notebook-cell" data-autorun="true">
+function sumUpToAcc(n, acc) {
+	if(n < 1) {
+		return acc
+	} else {
+		return sumUpToAcc(n-1, acc + n)
+	}
+}
+
+console.log(sumUpToAcc(10, 0))
+</script>
+
+<p>
+	The functions above are indeed defined recursively but they just compute a single value with not inner structure. Each of these function also have been defined iterativly using <code>while</code>, <code>for</code>-loops. Most imperative programmers would argue that for performance reasons that should have been done anyway.
+</p>
+
+<p>
+	A more interesting and more common use case for recursive functions is to work with recursive data structures like trees or linked lists. Lets define a few of those structures:
+</p>
+
+<script type="text/javascript+notebook-cell" data-autorun="true">
+export const binaryTreeWithDataInLeafs = {
+	left: {
+		left: {value: 3},
+		right: {
+			left: {
+				left: {value: 7},
+				right: {value: 5},
+			},
+			right: {value: 2},
+		},
+	},
+	right: {
+		left: {
+			left: {value: 1},
+			right: {value: 6},
+		},
+		right: {
+			left: {value: 5},
+			right: {value: 9},
+		},
+	},
+}
+</script>
+
+<script type="text/javascript+notebook-cell" data-autorun="true">
+export const binaryTreeWithInnerData = {
+	value: 10,
+	left: {
+		value: 3,
+		left: {value: 5, left: {nil: true}, right: {nil: true}},
+		right: {
+			value: 4,
+			left: {
+				value: 6,
+				left: {value: 1, left: {nil: true}, right: {nil: true}},
+				right: {value: 2, left: {nil: true}, right: {nil: true}},
+			},
+			right: {value: 7, left: {nil: true}, right: {nil: true}},
+		},
+	},
+	right: {
+		value: 9,
+		left: {
+			value: 3,
+			left: {value: 8, left: {nil: true}, right: {nil: true}},
+			right: {value: 2, left: {nil: true}, right: {nil: true}},
+		},
+		right: {
+			value: 7,
+			left: {value: 5, left: {nil: true}, right: {nil: true}},
+			right: {value: 9, left: {nil: true}, right: {nil: true}},
+		},
+	},
+}
+</script>
+
+<script type="text/javascript+notebook-cell" data-autorun="true">
+export const linkedList = {
+	head: 4,
+	tail: {
+		head: 8,
+		tail: {
+			head: 15,
+			tail: {
+				head: 16,
+				tail: {
+					nil: true
+				}
+			}
+		}
+	}
+}
+</script>
+
+<p>
+	Let us also define a simple JavaScript array to contain some numbers:
+</p>
+
+<script type="text/javascript+notebook-cell" data-autorun="true">
+export const simpleArray = [4,8,15,16,23,42]
+</script>
+
+<p>
+	Lets say we want to sum all the elements in each of these structures. Starting with the easy part of summing thee numbers in the array. Here we can use either a imperative loop construct or a built in higher order function like <code>reduce</code>:
+</p>
+
+<script type="text/javascript+notebook-cell" data-autorun="true">
+function sumOfArrayLoop(arr) {
+	let sum = 0
+	for (let i=0;i<arr.length;i++) {
+		sum += arr[i]
+	}
+
+	return sum
+}
+
+function sumOfArrayReduce(arr) {
+	return arr.reduce((acc,el) =>acc+el, 0)
+}
+
+console.log(sumOfArrayLoop(simpleArray))
+console.log(sumOfArrayReduce(simpleArray))
+</script>
+
+<p>
+	Or we could even implement a custom recursive iteration through the array:
+</p>
+
+<script type="text/javascript+notebook-cell" data-autorun="true">
+function sumOfArrayRecursive(arr) {
+	if(arr.length === 0) {
+		return 0
+	} else {
+		const [first, ...rest] = arr
+		return first + sumOfArrayRecursive(rest)
+	}
+}
+
+function sumOfArrayRecursiveAcc(arr, acc) {
+	if(arr.length === 0) {
+		return acc
+	} else {
+		const [first, ...rest] = arr
+		return sumOfArrayRecursiveAcc(rest, acc + first)
+	}
+}
+
+
+console.log(sumOfArrayRecursive(simpleArray))
+console.log(sumOfArrayRecursiveAcc(simpleArray, 0))
+</script>
+
+
+<p>
+	For summing the array the preferred way to sume the array would of course be the usage of <code>reduce</code>. But when it somes to the recursive datastructures like our <code>binaryTreeWithDataInLeafs</code>, <code>binaryTreeWithInnerData</code> and <code>linkedList</code> there is no builtit reduce functions that takes care of the iteration for us. So we have to handroll each implementation:
+</p>
+
+
+<script type="text/javascript+notebook-cell" data-autorun="true">
+function sumOfTreeLeaf(tree) {
+	if(tree.hasOwnProperty("value")) {
+		return tree.value
+	} else {
+		return sumOfTreeLeaf(tree.left) + sumOfTreeLeaf(tree.right)
+	}
+}
+
+function sumOfTreeWithInner(tree) {
+	if(tree.hasOwnProperty("nil")) {
+		return 0
+	} else if(tree.hasOwnProperty("left") && tree.hasOwnProperty("right")) {
+		return tree.value + sumOfTreeWithInner(tree.left) + sumOfTreeWithInner(tree.right)
+	} else {
+		return tree.value
+	}
+}
+
+function sumOfLinkedList(list) {
+	if(list.hasOwnProperty("nil")) {
+		return 0
+	} else {
+		return list.head + sumOfLinkedList(list.tail)
+	}
+}
+
+
+console.log(sumOfTreeLeaf(binaryTreeWithDataInLeafs))
+console.log(sumOfTreeWithInner(binaryTreeWithInnerData))
+console.log(sumOfLinkedList(linkedList))
+
+</script>
+
+<p>
+	We could also try to come up with tail recursive iteration strategies but this will not work for the left/right branching structure in a tree only one of the two recursive calls can be in tail position:
+</p>
+
+<script type="text/javascript+notebook-cell" data-autorun="true">
+function sumOfTreeLeafAcc(tree, acc) {
+	if(tree.hasOwnProperty("value")) {
+		return tree.value + acc
+	} else {
+		return sumOfTreeLeafAcc(tree.right, sumOfTreeLeafAcc(tree.left, acc))
+	}
+}
+
+function sumOfTreeWithInnerAcc(tree, acc) {
+	if(tree.hasOwnProperty("nil")) {
+		return acc
+	} else if(tree.hasOwnProperty("left") && tree.hasOwnProperty("right")) {
+		return sumOfTreeWithInnerAcc(tree.right, sumOfTreeWithInnerAcc(tree.left, acc + tree.value))
+	} else {
+		return tree.value + acc
+	}
+}
+
+function sumOfLinkedListAcc(list, acc) {
+	if(list.hasOwnProperty("nil")) {
+		return acc
+	} else {
+		return sumOfLinkedListAcc(list.tail, acc + list.head)
+	}
+}
+
+
+console.log(sumOfTreeLeafAcc(binaryTreeWithDataInLeafs, 0))
+console.log(sumOfTreeWithInnerAcc(binaryTreeWithInnerData, 0))
+console.log(sumOfLinkedListAcc(linkedList, 0))
+</script>
+
+<p>
+	Now lets say we do not want to sum all the elements inside each datastructure but instead calculate their product or concatenate them as strings to serialize and print out each data structure. The solution seems to simply come up with a generic <code>reduce</code>-like function for each of our structures, that takes a accumulation function that combines all elements of the structure into a single value, instead of hardcoding the addition.
+</p>
+
+<script type="text/javascript+notebook-cell" data-autorun="true">
+function reduceOfTreeLeaf(fn, init, tree) {
+	if(tree.hasOwnProperty("value")) {
+		return fn(init, tree.value)
+	} else {
+		return fn(reduceOfTreeLeaf(fn, init, tree.left), reduceOfTreeLeaf(fn, init, tree.right))
+	}
+}
+
+function reduceOfTreeWithInner(fn, init, tree) {
+	if(tree.hasOwnProperty("nil")) {
+		return init
+	} else if(tree.hasOwnProperty("left") && tree.hasOwnProperty("right")) {
+		return fn(tree.value, fn(reduceOfTreeWithInner(fn, init, tree.left),reduceOfTreeWithInner(fn, init, tree.right)))
+	} else {
+		return fn(init, tree.value)
+	}
+}
+
+function reduceOfLinkedList(fn, init, list) {
+	if(list.hasOwnProperty("nil")) {
+		return init
+	} else {
+		return fn(list.head, reduceOfLinkedList(fn, init, list.tail))
+	}
+}
+
+
+console.log(reduceOfTreeLeaf((a,b) => a+b, 0, binaryTreeWithDataInLeafs))
+console.log(reduceOfTreeWithInner((a,b) => a+b, 0, binaryTreeWithInnerData))
+console.log(reduceOfLinkedList((a,b) => a+b, 0, linkedList))
+
+console.log(reduceOfTreeLeaf((a,b) => a*b, 1, binaryTreeWithDataInLeafs))
+console.log(reduceOfTreeWithInner((a,b) => a*b, 1, binaryTreeWithInnerData))
+console.log(reduceOfLinkedList((a,b) => a*b, 1, linkedList))
+
+console.log(reduceOfTreeLeaf((a,b) => `<${a}:${b}>`, 'Leaf', binaryTreeWithDataInLeafs))
+console.log(reduceOfTreeWithInner((a,b) => `<${a}:${b}>`, 'Leaf', binaryTreeWithInnerData))
+console.log(reduceOfLinkedList((a,b) => `${a} :: ${b}`, 'NIL', linkedList))
+
+</script>
+
+<p>
+	This almost seems to work. We could not replace your summation (<code>+</code>) with an arbitrary binary function. At least for calculating the product of the elements we got the correct result. For the <code>linkedList</code> we also got the correct string concatination showing use the sequency of all elements. But for the tree structures the result is not exactly what we want.
+</p>
+
+<p>
+	The binary function that our reducers takes as argument is not a good fit for the branching structure of the trees. For the binary without elements on the inner nodes the binary function can not reflect the unary structure of the leafs correctly. For the the binary tree with elements at each inner leaf it is even worse: the binary function can not handle the balanced triple-concatination of the left branch, the current value and the right branch correctly. This is because in our implementation of reduceOfTreeWithInner we had to call the `fn` twice.
+</p>
+
+<p>
+	I summary we can observe that the interface of our <code>reduce</code> function with the binary reduction operation as argument is not expressive enough to capture all three kinds of recursive data structures. 
+</p>
+
+<p>
+	Lets try again.
+</p>
+
+<script type="text/javascript+notebook-cell" data-autorun="true">
+function reduceOfTreeLeaf(handleLeaf, handleBranch, tree) {
+	if(tree.hasOwnProperty("value")) {
+		return handleLeaf(tree.value)
+	} else {
+		return handleBranch(reduceOfTreeLeaf(handleLeaf, handleBranch, tree.left), reduceOfTreeLeaf(handleLeaf, handleBranch, tree.right))
+	}
+}
+
+function reduceOfTreeWithInner(handleNil, handleValue, handleBranch, tree) {
+	if(tree.hasOwnProperty("nil")) {
+		return handleNil()
+	} else if(tree.hasOwnProperty("left") && tree.hasOwnProperty("right")) {
+		return handleBranch(tree.value, reduceOfTreeWithInner(handleNil, handleValue, handleBranch, tree.left),reduceOfTreeWithInner(handleNil, handleValue, handleBranch, tree.right))
+	} else {
+		return handleValue(tree.value)
+	}
+}
+
+function reduceOfLinkedList(handleHead, handleNil, list) {
+	if(list.hasOwnProperty("nil")) {
+		return handleNil()
+	} else {
+		return handleHead(list.head, reduceOfLinkedList(handleHead, handleNil, list.tail))
+	}
+}
+
+
+console.log(reduceOfTreeLeaf((v) => v, (a,b) => a+b, binaryTreeWithDataInLeafs))
+console.log(reduceOfTreeWithInner(() => 0, v => v, (a,b) => a+b, binaryTreeWithInnerData))
+console.log(reduceOfLinkedList((a,b) => a+b, () => 0, linkedList))
+
+console.log(reduceOfTreeLeaf((v) => v, (a,b) => a*b, binaryTreeWithDataInLeafs))
+console.log(reduceOfTreeWithInner(() => 1, v => v, (v, l,r) => v*l*r, binaryTreeWithInnerData))
+console.log(reduceOfLinkedList((a,b) => a*b, () => 1, linkedList))
+
+console.log(reduceOfTreeLeaf((v) => v, (a,b) => `<${a}:${b}>`, binaryTreeWithDataInLeafs))
+console.log(reduceOfTreeWithInner(() => "!", v => v, (v, l, r) => `<${l}:${v}:${r}>`, binaryTreeWithInnerData))
+console.log(reduceOfLinkedList((a,b) => `${a} :: ${b}`, () => 'NIL', linkedList))
+
+</script>
+
+<p>
+	Instead of passing a single binary function and an initial value to each reducer we pass a specific function for each recursion case that might occur. Notice how <code>reduceOfTreeWithInner</code> now expects 3 functions, one for handling the empty leaf case, one for handling the single value leaf case and one for handling the inner node with two children an a value case. The latter one taking 3 instead of two arguments. 
+</p>
+
 
 <script type="text/javascript+notebook-cell" data-autorun="true">
 export const someNumberArray = [1,2,3,4]
