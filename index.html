@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="favicon.svg">
+<title>Recursion Schemes</title>
+<link rel="stylesheet" href="assets/blog-cells.css" />
+<script src="assets/babel.min.js"></script>
+<script src="assets/blog-cells.js"></script>
+<style>
+main {
+max-width: 40em;
+margin: 0 auto 5em;
+}
+
+a {
+	color: #1e70af;
+}
+</style>
+</head>
+<body>
+<main>
+<h1><img src="favicon.svg" alt="" style="height: 1em; vertical-align: text-bottom;"> Recursion Schemes</h1>
+
+<p>
+	This is a simple introduction to recursion schemes.
+</p>
+
+<p>
+	Recursion schemes are a generalization of common patterns of recursion.
+</p>
+
+<p>
+	If you have used <code>Array.map</code>, <code>Array.filter</code> or <code>Array.reduce</code> you are already familiar with higher order functions in which you only specify what to do to each element of an array but not how to iterate the array.
+</p>
+
+<p>
+	TBD
+</p>
+
+<script type="text/javascript+notebook-cell" data-autorun="true">
+export const someNumberArray = [1,2,3,4]
+export const someBooleanArray = [true, false, false, true, true, false]
+</script>
+
+<script type="text/javascript+notebook-cell" data-autorun="true">
+function sumOfArrayRecursive(list) {
+	if (list.length === 0) {
+		return 0
+	} else {
+		return list[0] + sumOfArrayRecursive(list.slice(1))
+	}
+}
+
+console.log(sumOfArrayRecursive(someNumberArray))
+</script>
+
+<script type="text/javascript+notebook-cell" data-autorun="true">
+function sumOfArrayRecursiveAccumulatedHelper(list, acc) {
+	if (list.length === 0) {
+		return acc
+	} else {
+		return sumOfArrayRecursiveAccumulatedHelper(list.slice(1), acc + list[0])
+	}
+}
+
+function sumOfArrayTailRecursive(list) {
+	return sumOfArrayRecursiveAccumulatedHelper(someNumberArray, 0)
+}
+
+console.log(sumOfArrayTailRecursive(someNumberArray))
+</script>
+
+<script type="text/javascript+notebook-cell" data-autorun="true">
+
+function sumOfArrayReduce(list) {
+	const sum = (a,b) => a+b
+	return list.reduce(sum, 0)
+}
+
+console.log(sumOfArrayReduce(someNumberArray))
+</script>
+
+<script type="text/javascript+notebook-cell" data-autorun="true">
+
+
+function fold(fn, init, list) {
+	if (list.length === 0) {
+		return init
+	} else {
+		return fn(list[0], fold(fn, init, list.slice(1)))
+	}
+}
+
+function sumOfArrayReduce(list) {
+	const sum = (a,b) => a+b
+	return fold(sum, 0, list)
+}
+
+console.log(sumOfArrayReduce(someNumberArray))
+</script>
+
+
+<script type="text/javascript+notebook-cell" data-autorun="true">
+
+function foldAccumulationHelper(fn, list, acc) {
+	if (list.length === 0) {
+		return acc
+	} else {
+		return foldAccumulationHelper(fn, list.slice(1), fn(acc, list[0]))
+	}
+}
+
+export function fold(fn, init, list) {
+	return foldAccumulationHelper(fn, list, init)
+}
+
+function sumOfArrayReduce(list) {
+	const sum = (a,b) => a+b
+	return fold(sum, 0, list)
+}
+
+console.log(sumOfArrayReduce(someNumberArray))
+</script>
+
+<script type="text/javascript+notebook-cell" data-autorun="true">
+
+function productOfArrayReduce(list) {
+	const sum = (a,b) => a*b
+	return fold(sum, 1, list)
+}
+
+console.log(productOfArrayReduce(someNumberArray))
+</script>
+
+<script type="text/javascript+notebook-cell" data-autorun="true">
+
+function maxOfArrayReduce(list) {
+	const sum = (a,b) => Math.max(a,b)
+	return fold(sum, -Infinity, list)
+}
+
+console.log(maxOfArrayReduce(someNumberArray))
+</script>
+
+<script type="text/javascript+notebook-cell" data-autorun="true">
+
+function minOfArrayReduce(list) {
+	const sum = (a,b) => Math.min(a,b)
+	return fold(sum, Infinity, list)
+}
+
+console.log(minOfArrayReduce(someNumberArray))
+</script>
+
+<script type="text/javascript+notebook-cell" data-autorun="true">
+
+function findOfArrayReduce(list, pred) {
+	const sum = (a,b) => a !== null ? a : pred(b) ? b : null
+	return fold(sum, null, list)
+}
+
+console.log(findOfArrayReduce(someNumberArray, (x) => x > 2))
+</script>
+
+<script type="text/javascript+notebook-cell" data-autorun="true">
+
+function anyOfArrayReduce(list) {
+	const sum = (a,b) => a || b
+	return fold(sum, false, list)
+}
+
+function allOfArrayReduce(list) {
+	const sum = (a,b) => a && b
+	return fold(sum, true, list)
+}
+
+
+console.log(anyOfArrayReduce(someBooleanArray))
+console.log(allOfArrayReduce(someBooleanArray))
+</script>
+
+<script type="text/javascript+notebook-cell" data-autorun="true">
+
+function minOfArrayReduce(list) {
+	const sum = (a,b) => Math.min(a,b)
+	return fold(sum, Infinity, list)
+}
+
+console.log(minOfArrayReduce(someNumberArray))
+</script>
+
+<script type="text/javascript+notebook-cell" data-autorun="true">
+
+export function stringOfArrayReduce(list) {
+	const sum = (a,b) => a ? `${a},${b}` : b
+	return fold(sum, '', list)
+}
+
+console.log(stringOfArrayReduce(someNumberArray))
+</script>
+
+<script type="text/javascript+notebook-cell" data-autorun="true">
+export const someBinaryTree = {
+	left: {
+		left: {value: 3},
+		right: {
+			left: {value: 4},
+			right: {value: 7}
+		}
+	}, 
+	right: {
+		left: {value: 2},
+		right: {value: 6}
+	}
+}
+
+export const someBooleanTree = {
+	left: {
+		left: {value: true},
+		right: {
+			left: {value: false},
+			right: {value: true}
+		}
+	}, 
+	right: {
+		left: {value: true},
+		right: {value: false}
+	}
+}
+</script>
+
+<script type="text/javascript+notebook-cell" data-autorun="true">
+
+
+export function foldTree(branchFn, leafFn, tree) {
+	if (tree.hasOwnProperty("value")) {
+		return leafFn(tree.value)
+	} else {
+		const leftFolded = foldTree(branchFn, leafFn, tree.left)
+		const rightFolded = foldTree(branchFn, leafFn, tree.right)
+		return branchFn(leftFolded, rightFolded)
+	}
+}
+
+function sumOfTreeReduce(tree) {
+	const leaf = (v) => v
+	const combine = (a,b) => a + b
+	return foldTree(combine, leaf, tree)
+}
+
+function stringSumOfTreeReduce(tree) {
+	const leaf = (v) => `${v}`
+	const combine = (a,b) => `${a} + ${b}`
+	return foldTree(combine, leaf, tree)
+}
+
+console.log(stringSumOfTreeReduce(someBinaryTree) + " = " + sumOfTreeReduce(someBinaryTree))
+</script>
+
+
+<script type="text/javascript+notebook-cell" data-autorun="true">
+
+
+function productOfTreeReduce(tree) {
+	const leaf = (v) => v
+	const combine = (a,b) => a*b
+	return foldTree(combine, leaf, tree)
+}
+
+function minOfTreeReduce(tree) {
+	const leaf = (v) => v
+	const combine = (a,b) => Math.min(a,b)
+	return foldTree(combine, leaf, tree)
+}
+
+export function stringOfTreeReduce(tree) {
+	const leaf = (v) => v
+	const combine = (a,b) => `<${a}:${b}>`
+	return foldTree(combine, leaf, tree)
+}
+
+
+function maxOfTreeReduce(tree) {
+	const leaf = (v) => v 
+	const combine = (a,b) => Math.max(a,b)
+	return foldTree(combine, leaf, tree)
+}
+
+function allOfTreeReduce(tree) {
+	const leaf = (v) => v === true
+	const combine = (a,b) => a && b
+	return foldTree(combine, leaf, tree)
+}
+
+function anyOfTreeReduce(tree) {
+	const leaf = (v) => v === true
+	const combine = (a,b) => a || b
+	return foldTree(combine, leaf, tree)
+}
+
+console.log(stringOfTreeReduce(someBinaryTree))
+
+console.log(productOfTreeReduce(someBinaryTree))
+console.log(minOfTreeReduce(someBinaryTree))
+console.log(maxOfTreeReduce(someBinaryTree))
+console.log(allOfTreeReduce(someBooleanTree))
+console.log(anyOfTreeReduce(someBooleanTree))
+</script>
+
+<script type="text/javascript+notebook-cell" data-autorun="true">
+export const someLinkedList = {
+	head: 5,
+	tail: {
+		head: 4, 
+		tail: {
+			head: 3, 
+			tail: {
+				head: 7, 
+				tail: {
+					head: 6, 
+					tail: {nil: true}
+				}
+			}
+		}
+	}
+}
+
+export const someBooleanLinkedList = {
+	head: true,
+	tail: {
+		head: false, 
+		tail: {
+			head: true, 
+			tail: {
+				head: true, 
+				tail: {
+					head: false, 
+					tail: {nil: true}
+				}
+			}
+		}
+	}
+}
+</script>
+
+<script type="text/javascript+notebook-cell" data-autorun="true">
+
+
+export function foldLinkedList(branchFn, init, linkedList) {
+	if (linkedList.nil) {
+		return init()
+	} else {
+		const rightFolded = foldLinkedList(branchFn, init, linkedList.tail)
+		return branchFn(linkedList.head, rightFolded)
+	}
+}
+
+function sumOfLinkedListReduce(linkedList) {
+	const leaf = () => 0
+	const combine = (a,b) => a + b
+	return foldLinkedList(combine, leaf, linkedList)
+}
+
+function stringSumOfLinkedListReduce(linkedList) {
+	const leaf = (v) => `0`
+	const combine = (a,b) => `${a} + ${b}`
+	return foldLinkedList(combine, leaf, linkedList)
+}
+
+export function stringOfLinkedListReduce(linkedList) {
+	const leaf = (v) => `NIL`
+	const combine = (a,b) => `${a} :: ${b}`
+	return foldLinkedList(combine, leaf, linkedList)
+}
+
+console.log(stringOfLinkedListReduce(someLinkedList))
+
+console.log(stringSumOfLinkedListReduce(someLinkedList) + " = " + sumOfLinkedListReduce(someLinkedList))
+</script>
+
+
+
+<script type="text/javascript+notebook-cell" data-autorun="true">
+function mapArray(fn, array) {
+	if(array.length === 0) {
+		return []
+	}
+	return [fn(array[0]), ...mapArray(fn, array.slice(1))]
+}
+
+function mapTree(fn, tree) {
+	if(tree.hasOwnProperty('value')) {
+		return {value: fn(tree.value)}
+	}
+	return {
+		left: mapTree(fn, tree.left),
+		right: mapTree(fn, tree.right),
+	}
+}
+
+function mapLinkedList(fn, list) {
+	if(list.hasOwnProperty('nil')) {
+		return list
+	}
+	return {
+		head: fn(list.head),
+		tail: mapLinkedList(fn, list.tail),
+	}
+}
+
+const times3 = (x) => x*3
+
+console.log(stringOfArrayReduce(someNumberArray))
+console.log(stringOfTreeReduce(someBinaryTree))
+console.log(stringOfLinkedListReduce(someLinkedList))
+
+console.log(stringOfArrayReduce(mapArray(times3, someNumberArray)))
+console.log(stringOfTreeReduce(mapTree(times3, someBinaryTree)))
+console.log(stringOfLinkedListReduce(mapLinkedList(times3, someLinkedList)))
+</script>
+
+
+
+<script type="text/javascript+notebook-cell" data-autorun="true">
+
+
+function mapPatternTree(fn, tree) {
+	if(tree.hasOwnProperty('value')) {
+		return tree
+	}
+	return {
+		left: fn(tree.left),
+		right: fn(tree.right),
+	}
+}
+
+function mapPatternLinkedList(fn, list) {
+	if(list.hasOwnProperty('nil')) {
+		return list
+	}
+	return {
+		head: list.head,
+		tail: fn(list.tail),
+	}
+}
+
+const sumPatternTree = (t) => {
+	if(t.hasOwnProperty('value')) {
+		return t.value
+	} else {
+		return t.left + t.right
+	}
+}
+
+const sumPatternLinkedList = (l) => {
+	if(l.hasOwnProperty('nil')) {
+		return 0
+	} else {
+		return l.head + l.tail
+	}
+}
+
+const rangeLinkedList = (l) => {
+	if(l === 0) {
+		return {nil: true}
+	} else {
+		return {head: l, tail: l-1}
+	}
+}
+
+const cataMorphism = (algebra, mapper) => {
+	const loop = (term) => {
+		return algebra(mapper(loop, term))
+	}
+	return loop
+}
+
+const anaMorphism = (coalgebra, mapper) => {
+	const loop = (seed) => {
+		return mapper(loop, coalgebra(seed))
+	}
+	return loop
+}
+
+const hyloMorphism = (algebra, coalgebra, mapper) => {
+	const loop = (seed) => {
+		return algebra(mapper(loop, coalgebra(seed)))
+	}
+	return loop
+}
+
+
+console.log(cataMorphism(sumPatternLinkedList, mapPatternLinkedList)(someLinkedList))
+console.log(stringOfLinkedListReduce(anaMorphism(rangeLinkedList, mapPatternLinkedList)(10)))
+console.log(hyloMorphism(sumPatternLinkedList, rangeLinkedList, mapPatternLinkedList)(100))
+</script>
+
+<h2>References</h2>
+
+
+<p>
+	TBD
+</p>
+
+</main>
+</body>
+</html>
