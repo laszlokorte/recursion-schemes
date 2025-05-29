@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="favicon.svg">
+<title>Recursion Schemes</title>
+<link rel="stylesheet" href="assets/blog-cells.css" />
+<script src="assets/babel.min.js"></script>
+<script src="assets/blog-cells.js"></script>
+<style>
+main {
+max-width: 40em;
+margin: 0 auto 5em;
+}
+
+a {
+	color: #1e70af;
+}
+</style>
+</head>
+<body>
+<main>
+<h1><img src="favicon.svg" alt="" style="height: 1em; vertical-align: text-bottom;"> Recursion Schemes</h1>
+
+<p>
+	This is a simple and practical introduction to <a href="https://github.com/passy/awesome-recursion-schemes">recursion schemes</a> in functional programming.
+</p>
+
+<p>
+	Recursion schemes are higher order functions that can be used as building blocks for composing recursive algorithms. A recursion scheme separates the recursive part of a function from the actual calculation the same way the <code>Array.map</code> separates the the iteration from the calculation that should be done on each element.
+</p>
+
+<p>
+	Higher order functions like <code>map</code>, <code>filter</code> and <code>reduce</code> are well known and nowadays even common in many procuderal programming languages. Even though <code>reduce</code> can actually be seen as an example of a recursion scheme, the general concept of recursion schemes is not well known among programmers.
+</p>
+
+<p>
+	When working with lists or collections in general, many people might think of higher order functions like <code>map</code>, <code>filter</code> and <code>reduce</code> instead of writing <code>while</code>- or <code>for</code>-loops by hand. These functions are seens as more elegant, more succinct and more expressive. They avoid mistakes like off-by-one-errors and expression assumtions about invariants like the <code>map</code> operation not effecting the length of a collection or the resuld of <code>filter</code> not modifying the elements. 
+</p>
+
+<p>
+	But when working with recursive algorithms (like mergesort, quicksort, binary-search) many people would still write the recursion by hand (or translate the recursive algorithm into an iterative one). This article act as an introduction to recursion schemes that guide you to to come up with higher order functions similar to <code>map</code>, <code>filter</code> and <code>reduce</code> for working with recursive data structures. Spoiler: They will be called <code>cata</code>, <code>ana</code> and <code>hylo</code>.
+</p>
+
+<h2>Recap: Comparing manual interation to higher-order-functions</h2>
+
+<p>
+	Before exploring recursive functions lets take another look at the higher order functions <code>map</code>, <code>filter</code> and <code>reduce</code> to convince us that they help us to write more readable and concise code.
+</p>
+
+<p>
+	Take a look at the following two examples. The first one is implemented in an imperative style using a <code>for</code>-loop, the second one uses the highter order functions to abstract from the iteration and only specify the transformations to be applied to the elements.
+</p>
+
+<figure>
+<script type="text/javascript+notebook-cell" data-autorun="true">
+function imperativeExample(list) {
+	let result = 0
+
+	for(let i=1;i<list.length;i++) {
+		if (list[i] % 2 == 0) {
+			result += list[i] / 2
+		}
+	}
+
+	return result
+}
+
+console.log(imperativeExample([0,3,6,7,4,2,1,8]))
+// did you spot the mistake
+</script>
+	<figcaption>processing a list imperatively</figcaption>
+</figure>
+
+<figure>
+<script type="text/javascript+notebook-cell" data-autorun="true">
+function mapFilterReduceExample(list) {
+	return list
+		.filter(v => v  % 2 == 0)
+		.map(v => v / 2)
+		.reduce((a,b) => a+b, 0)
+}
+
+console.log(mapFilterReduceExample([0,3,6,7,4,2,1,8]))
+</script>
+	<figcaption>processing of a list using higher order functions</figcaption>
+</figure>
+
+<details>
+	<summary>But did you spot the mistake in the imperative appraoch?</summary>
+	<p>
+		The counter starts and <code>i=1</code> and skips the first element of the list.
+	</p>
+</details>
+
+<p>
+	Both functions sum all the even elements of the list devided by two. In the imperative version the iteration (initializing <code>i=0</code>, incrementing <code>i</code> and terminating the loop if <code>i</code> reaches the length of the list) is mixed up with the calculation done on the elements of the list. This can be seen as a violation of the principle of separation of concerns.
+</p>
+
+<p>
+	If you are not familiar with these highter order functions lets think about how you could implement them yourself:
+</p>
+
+<figure>
+<script type="text/javascript+notebook-cell" data-autorun="true">
+function map(fn, list) {
+	const result = []
+
+	for(let i=0;i<list.length;i++) {
+		result.push(fn(list[i]))
+	}
+
+	return result
+}
+
+function filter(fn, list) {
+	const result = []
+
+	for(let i=0;i<list.length;i++) {
+		if(fn(list[i])) {
+			result.push(list[i])
+		}
+	}
+
+	return result
+}
+
+function reduce(fn, init, list) {
+	let result = init
+
+	for(let i=0;i<list.length;i++) {
+		result = fn(result, list[i])
+	}
+
+	return result
+}
+
+function pipe(arg, ...fns) {
+	return reduce((a,b) => b(a), arg, fns)
+}
+
+console.log(pipe(
+	[0,3,6,7,4,2,1,8], 
+	(l) => filter(v => v  % 2 == 0, l),
+	(l) => map(v => v / 2, l),
+	(l) => reduce((a,b) => a+b, 0,  l),
+))
+
+
+</script>
+	<figcaption>implementation of map, filter and reduce</figcaption>
+</figure>
+
+<p>
+	When comparing our implementations of the 3 functions with with imperative implementation of <code>imperativeExample</code> above we can notice that each of the three functions captures a small part of the <code>for</code>-loop and that these parts are then recomposed by composing the functions.
+</p>
+
+<h2>Recursive functions</h2>
+
+<p>
+	Our goal is now to apply this separation between <em>calculation per step</em> and <code>doing the stepping</code> for recursive functions as well. This will lead us to discover common patterns in recursion, similar to <code>map</code>, <code>filter</code> and <code>reduce</code>.
+</p>
+
+<p>
+	First lets take a look at some recursive functions:
+</p>
+
+<figure>
+<script type="text/javascript+notebook-cell" data-autorun="true">
+
+function factorial(n) {
+	if (n<=1) {
+		return 1
+	} else {
+		return n * factorial(n-1)
+	}
+}
+
+console.log(factorial(10))
+
+
+</script>
+	<figcaption>recursive factorial</figcaption>
+</figure>
+
+
+<figure>
+<script type="text/javascript+notebook-cell" data-autorun="true">
+function range(n) {
+	if (n<=1) {
+		return [1]
+	} else {
+		return [n, ...range(n-1)]
+	}
+}
+
+console.log(range(10))
+</script>
+	<figcaption>recursive range</figcaption>
+</figure>
+
+
+
+<figure>
+<script type="text/javascript+notebook-cell" data-autorun="true">
+function sum(list) {
+	if (list<1) {
+		return 0
+	} else {
+		const [first, ...rest] = list
+		return first + sum(rest)
+	}
+}
+
+console.log(sum([1,2,3,4,5]))
+</script>
+	<figcaption>recursive range</figcaption>
+</figure>
+
+<h2>References</h2>
+
+
+<p>
+	TBD
+</p>
+
+</main>
+</body>
+</html>

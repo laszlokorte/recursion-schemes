@@ -10,12 +10,27 @@
 <script src="assets/blog-cells.js"></script>
 <style>
 main {
-max-width: 40em;
-margin: 0 auto 5em;
+	max-width: 40em;
+	margin: 0 auto 5em;
 }
 
 a {
 	color: #1e70af;
+}
+
+figure {
+	margin: 1em 0;
+	background: #eee;
+}
+
+figcaption {
+	margin: 0;
+	padding: 1em;
+
+}
+
+figure .cell-editor {
+	margin: 0;
 }
 </style>
 </head>
@@ -28,195 +43,489 @@ a {
 </p>
 
 <p>
-	Recursion schemes are higher order functions that can be used as building blocks for composing recursive algorithms. A recursion scheme separates the recursive part of a function from the actual calculation the same way the <code>Array.map</code> separates the the iteration from the calculation that should be done on each element.
+	Recursion schemes are higher order functions (<abbr title="higher order functions">HOF</abbr>) that can be used as building blocks for composing recursive algorithms. Recursion schemes separates the recursive part of a recursive algorithm from the actual calculation the same way the functions like <code>Array.map</code> separate the the <em>iteration</em> part from the calculation that should be done on each element.
 </p>
 
 <p>
-	Higher order functions like <code>map</code>, <code>filter</code> and <code>reduce</code> are well known and nowadays even common in many procuderal programming languages. Even though <code>reduce</code> can actually be seen as an example of a recursion scheme, the general concept of recursion schemes is not well known among programmers.
+	This article will be guiding you through a thought process to understanding recursion schemes by inventing them yourself.
+</p>
+
+<h2>Recap: Higher Order Functions &mdash; <code>for</code> vs <code>map</code></h2>
+
+<p>
+	Before we start lets revisit a well known higher order function: <code>map</code>.
+	Originally rooted in function programming, nowadays it is commonly used in imperative and object oriented programming languages. It allows to express an element-wise operation over some container object. 
 </p>
 
 <p>
-	When working with lists or collections in general, many people might think of higher order functions like <code>map</code>, <code>filter</code> and <code>reduce</code> instead of writing <code>while</code>- or <code>for</code>-loops by hand. These functions are seens as more elegant, more succinct and more expressive. They avoid mistakes like off-by-one-errors and expression assumtions about invariants like the <code>map</code> operation not effecting the length of a collection or the resuld of <code>filter</code> not modifying the elements. 
-</p>
-
-<p>
-	But when working with recursive algorithms (like mergesort, quicksort, binary-search) many people would still write the recursion by hand (or translate the recursive algorithm into an iterative one). This article act as an introduction to recursion schemes that guide you to to come up with higher order functions similar to <code>map</code>, <code>filter</code> and <code>reduce</code> for working with recursive data structures. Spoiler: They will be called <code>cata</code>, <code>ana</code> and <code>hylo</code>.
-</p>
-
-<h2>Recap: Comparing manual interation to higher-order-functions</h2>
-
-<p>
-	Before exploring recursive functions lets take another look at the higher order functions <code>map</code>, <code>filter</code> and <code>reduce</code> to convince us that they help us to write more readable and concise code.
-</p>
-
-<p>
-	Take a look at the following two examples. The first one is implemented in an imperative style using a <code>for</code>-loop, the second one uses the highter order functions to abstract from the iteration and only specify the transformations to be applied to the elements.
+	Take a look at the following two examples. The first one iterates over an array to multiply each element by two, collecting the results in a new array.
 </p>
 
 <figure>
 <script type="text/javascript+notebook-cell" data-autorun="true">
-function imperativeExample(list) {
-	let result = 0
 
-	for(let i=1;i<list.length;i++) {
-		if (list[i] % 2 == 0) {
-			result += list[i] / 2
+function doubleEachElementIteratively(array) {
+	let result = []
+
+	for (var i = 0; i < array.length; i++) {
+		result.push(array[i] * 2)
+	}
+
+	return result
+}
+
+console.log(doubleEachElementIteratively([1,2,3]))
+
+
+</script>
+	<figcaption><strong>Example:</strong> doubling each element of an array via explicit iteration</figcaption>
+</figure>
+
+<p>
+	The next one achieves the same goal but separates the process of iteration and the element-wise calculation into two separte functions. The function doing the interation and collecting the resulting values is called	<code>arrayMap</code>, or typically just <code>map</code>.
+</p>
+
+<figure>
+
+<script type="text/javascript+notebook-cell" data-autorun="true">
+
+export function arrayMap(fn, array) {
+	let result = []
+
+	for (var i = 0; i < array.length; i++) {
+		result.push(fn(array[i]))
+	}
+
+	return result
+}
+
+function doubleEachElementMapped(array) {
+	return arrayMap((el) => el  * 2, array)
+}
+
+console.log(doubleEachElementMapped([1,2,3]))
+</script>
+<figcaption><strong>Example:</strong> doubling each element of an array via the higher order <code>map</code> function</figcaption>
+</figure>
+
+<p>
+	There are many advantages of separating the iteration from the elementwise calculation. The most obvious one is that the iteration has only to be defined once and can be reused:
+</p>
+
+<figure>
+<script type="text/javascript+notebook-cell" data-autorun="true">
+console.log("Tripling:", arrayMap((el) => el  * 3, [1,2,3]))
+console.log("Incrementing:", arrayMap((el) => el + 1, [1,2,3]))
+console.log("Checking oddness:", arrayMap((el) => el % 2 == 1, [1,2,3]))
+</script>
+<figcaption><strong>Example:</strong> Various elementwise transformations of an array</figcaption>
+</figure>
+
+<p>
+	Further advantages are: Intentions and invariants are expressed more clearly and the ease of later refactorings. Applying the <code>map</code> function will not change the number of elements in the array and will not change the order of the elements. Abstracting away the specific iteration stragegy allowes for later changes and optimizations. For example the internal iteration order could be reversed or eben even parallelized without effecting the observable result:
+</p>
+
+
+<figure>
+<script type="text/javascript+notebook-cell" data-autorun="true">
+
+export function arrayMap(fn, array) {
+	let result = []
+
+	// iterating from back to front
+	for (var i = array.length-1; i >= 0; i--) {
+		result.unshift(fn(array[i]))
+	}
+
+	return result
+}
+
+console.log("Tripling:", arrayMap((el) => el  * 3, [1,2,3]))
+console.log("Incrementing:", arrayMap((el) => el + 1, [1,2,3]))
+console.log("Checking oddness:", arrayMap((el) => el % 2 == 1, [1,2,3]))
+</script>
+<figcaption><strong>Example:</strong> doubling each element of an array via the higher order <code>map</code> function</figcaption>
+</figure>
+
+<p>
+	The third advantage is that the same concept of applying an element-wise transformation can be implemented for other containers of elements. For example for a binary tree as the one below:
+</p>
+
+<figure>
+<script type="text/javascript+notebook-cell" data-autorun="true">
+export const simpleBinaryTree = {
+	left: {left: {value: 2} , right: {value: 3}},
+	right: {left: {value: 5} , right: {left: {value: 2} , right: {value: 3}}}
+}
+</script>
+<figcaption><strong>Example:</strong> a simple binary tree structure, containing values in its leef</figcaption>
+</figure>
+
+<p>
+	A corresponding map function could be implemented as follows:
+</p>
+
+
+<figure>
+<script type="text/javascript+notebook-cell" data-autorun="true">
+export function mapTree(fn, tree) {
+	if(tree.value) {
+		return {value: fn(tree.value)}
+	} else {
+		return {
+			left: mapTree(fn, tree.left),
+			right: mapTree(fn, tree.right)
 		}
 	}
-
-	return result
 }
-
-console.log(imperativeExample([0,3,6,7,4,2,1,8]))
-// did you spot the mistake
 </script>
-	<figcaption>processing a list imperatively</figcaption>
-</figure>
-
-<figure>
-<script type="text/javascript+notebook-cell" data-autorun="true">
-function mapFilterReduceExample(list) {
-	return list
-		.filter(v => v  % 2 == 0)
-		.map(v => v / 2)
-		.reduce((a,b) => a+b, 0)
-}
-
-console.log(mapFilterReduceExample([0,3,6,7,4,2,1,8]))
-</script>
-	<figcaption>processing of a list using higher order functions</figcaption>
-</figure>
-
-<details>
-	<summary>But did you spot the mistake in the imperative appraoch?</summary>
-	<p>
-		The counter starts and <code>i=1</code> and skips the first element of the list.
-	</p>
-</details>
-
-<p>
-	Both functions sum all the even elements of the list devided by two. In the imperative version the iteration (initializing <code>i=0</code>, incrementing <code>i</code> and terminating the loop if <code>i</code> reaches the length of the list) is mixed up with the calculation done on the elements of the list. This can be seen as a violation of the principle of separation of concerns.
-</p>
-
-<p>
-	If you are not familiar with these highter order functions lets think about how you could implement them yourself:
-</p>
-
-<figure>
-<script type="text/javascript+notebook-cell" data-autorun="true">
-function map(fn, list) {
-	const result = []
-
-	for(let i=0;i<list.length;i++) {
-		result.push(fn(list[i]))
-	}
-
-	return result
-}
-
-function filter(fn, list) {
-	const result = []
-
-	for(let i=0;i<list.length;i++) {
-		if(fn(list[i])) {
-			result.push(list[i])
-		}
-	}
-
-	return result
-}
-
-function reduce(fn, init, list) {
-	let result = init
-
-	for(let i=0;i<list.length;i++) {
-		result = fn(result, list[i])
-	}
-
-	return result
-}
-
-function pipe(arg, ...fns) {
-	return reduce((a,b) => b(a), arg, fns)
-}
-
-console.log(pipe(
-	[0,3,6,7,4,2,1,8], 
-	(l) => filter(v => v  % 2 == 0, l),
-	(l) => map(v => v / 2, l),
-	(l) => reduce((a,b) => a+b, 0,  l),
-))
-
-
-</script>
-	<figcaption>implementation of map, filter and reduce</figcaption>
+<figcaption><strong>Example:</strong> a simple implementation of <code>mapTree</code></figcaption>
 </figure>
 
 <p>
-	When comparing our implementations of the 3 functions with with imperative implementation of <code>imperativeExample</code> above we can notice that each of the three functions captures a small part of the <code>for</code>-loop and that these parts are then recomposed by composing the functions.
+	Then we coule use the <code>mapTree</code> function, the same way as we did with the <code>mapArray</code> function before, to transform each element in the tree:
 </p>
 
-<h2>Recursive functions</h2>
 
-<p>
-	Our goal is now to apply this separation between <em>calculation per step</em> and <code>doing the stepping</code> for recursive functions as well. This will lead us to discover common patterns in recursion, similar to <code>map</code>, <code>filter</code> and <code>reduce</code>.
-</p>
-
-<p>
-	First lets take a look at some recursive functions:
-</p>
 
 <figure>
 <script type="text/javascript+notebook-cell" data-autorun="true">
+console.log("original tree", simpleBinaryTree)
+console.log("doubling", mapTree(el => el * 2, simpleBinaryTree))
+console.log("check oddness", mapTree(el => el % 2 == 1, simpleBinaryTree))
+</script>
+<figcaption><strong>Example:</strong> a simple implementation of <code>mapTree</code></figcaption>
+</figure>
 
-function factorial(n) {
-	if (n<=1) {
+<p>
+	So we have seen that abstracting the process of stepping through a data structure by separating the <em>stepping</em> from the <em>work to do at each step</em> is a powerful tool. 
+</p>
+
+<h2>Recursive data structures</h2>
+
+<p>
+	With the binary tree in the example above we have seen that the corresponding <code>map</code> function allowed us to work with a recursive data structure without re-implementing the recursive part our self each time. 
+</p>
+
+<p>
+	But by the nature of the <code>map</code> function we were limited to modifying each value of the tree separately, having not access to the tree itself. What if we want to do actual tree-related calculations but still abstract away the recursive walking?
+</p>
+
+<p>
+	Lets take a look at a few typical cases. Say we want to determine the <strong>height of the tree</strong>, <strong>count the leafs</strong> of the tree, <strong>count the total number of nodes</strong>, <strong>find the minimum</strong> value inside the tree and <strong>find the maximum</strong> value inside the tree. We also want to serialize our tree into a string, for better readability
+</p>
+
+<p>
+	Lets first implement one function for each of our goals by hand. Afterwards we will try to find similaries in the recursion structure and come up with a general reusable solution.
+</p>
+
+
+<figure>
+<script type="text/javascript+notebook-cell" data-autorun="true">
+function binaryTreeHeight(tree) {
+	if(tree.hasOwnProperty('value')) {
 		return 1
 	} else {
-		return n * factorial(n-1)
+		return Math.max(binaryTreeHeight(tree.left), binaryTreeHeight(tree.right))
 	}
 }
 
-console.log(factorial(10))
-
-
+console.log(binaryTreeHeight(simpleBinaryTree))
 </script>
-	<figcaption>recursive factorial</figcaption>
+<figcaption><strong>Example:</strong> tree height</figcaption>
+</figure>
+
+<figure>
+<script type="text/javascript+notebook-cell" data-autorun="true">
+function binaryTreeLeafCount(tree) {
+	if(tree.hasOwnProperty('value')) {
+		return 1
+	} else {
+		return binaryTreeLeafCount(tree.left) + 
+			binaryTreeLeafCount(tree.right)
+	}
+}
+
+console.log(binaryTreeLeafCount(simpleBinaryTree))
+</script>
+<figcaption><strong>Example:</strong> tree leaf count</figcaption>
+</figure>
+
+<figure>
+<script type="text/javascript+notebook-cell" data-autorun="true">
+function binaryTreeNodeCount(tree) {
+	if(tree.hasOwnProperty('value')) {
+		return 1
+	} else {
+		return 1 + binaryTreeNodeCount(tree.left) + 
+			binaryTreeNodeCount(tree.right)
+	}
+}
+
+console.log(binaryTreeNodeCount(simpleBinaryTree))
+</script>
+<figcaption><strong>Example:</strong> tree leaf count</figcaption>
+</figure>
+
+<figure>
+<script type="text/javascript+notebook-cell" data-autorun="true">
+function binaryTreeMinimumValue(tree) {
+	if(tree.hasOwnProperty('value')) {
+		return tree.value
+	} else {
+		return Math.min(
+			binaryTreeMinimumValue(tree.left), 
+			binaryTreeMinimumValue(tree.right)
+		)
+	}
+}
+
+console.log(binaryTreeMinimumValue(simpleBinaryTree))
+</script>
+<figcaption><strong>Example:</strong> tree minimum value</figcaption>
+</figure>
+
+<figure>
+<script type="text/javascript+notebook-cell" data-autorun="true">
+function binaryTreeMaximumValue(tree) {
+	if(tree.hasOwnProperty('value')) {
+		return tree.value
+	} else {
+		return Math.max(
+			binaryTreeMaximumValue(tree.left), 
+			binaryTreeMaximumValue(tree.right)
+		)
+	}
+}
+
+console.log(binaryTreeMaximumValue(simpleBinaryTree))
+</script>
+<figcaption><strong>Example:</strong> tree maxiumum value</figcaption>
+</figure>
+
+<figure>
+<script type="text/javascript+notebook-cell" data-autorun="true">
+function binaryTreeToString(tree) {
+	if(tree.hasOwnProperty('value')) {
+		return "["+tree.value+"]"
+	} else {
+		return "("+(
+			binaryTreeToString(tree.left) +":"+ 
+			binaryTreeToString(tree.right)
+		)+")"
+	}
+}
+
+console.log(binaryTreeToString(simpleBinaryTree))
+</script>
+<figcaption><strong>Example:</strong> tree to string</figcaption>
+</figure>
+
+
+<p>
+	All the implementations above look very similar. All of them check if the current node we are looking at is a leaf (i.e. has a <code>value</code> property). If so, a base case result is returned, either a constant or a something based on the value stored in the leaf. If on the other hand the current node is an inner node, two recursive function calls are invoked (one for the left and one for the right branch of the tree) and then their result is combined in a speicific way.
+</p>
+
+<p>
+	<strong>This pattern of similarity between these function is one of the recursion schemes we are after.</strong> Lets try to extract this pattern of recursive function calls into a common pattern. We take one of the function definitions above and try to move all the specific calculations into functions parameters to be passed in later:
+</p>
+
+
+<figure>
+<script type="text/javascript+notebook-cell" data-autorun="true">
+export function binaryTreeReduce(handleLeaf, handleBranch, tree) {
+	if(tree.hasOwnProperty('value')) {
+		return handleLeaf(tree.value)
+	} else {
+		return handleBranch(
+			binaryTreeReduce(handleLeaf, handleBranch, tree.left), 
+			binaryTreeReduce(handleLeaf, handleBranch, tree.right)
+		)
+	}
+}
+</script>
+<figcaption><strong>Example:</strong> generic binary tree reduction</figcaption>
+</figure>
+
+<p>
+	Instead of hardcoding how the recursive results for the two branches shall be combined and what to do with the leaf nodes, we accept to callback functions: <code>handleLeaf</code> is called with the value stored in each leaf (similar to <code>fn</code> in our <code>treeMap</code> function before) and <code>handleBranch</code> is called with the two results from both of the recursive calls.
+</p>
+
+<p>
+	Now be can express all of our tree-based calculations from above in terms of our new <code>binaryTreeReduce</code> function:
+</p>
+
+
+<figure>
+<script type="text/javascript+notebook-cell" data-autorun="true">
+console.log("Height", binaryTreeReduce(
+	(v) => 1, (l, r) => Math.max(l, r), 
+	simpleBinaryTree
+))
+console.log("LeafCount", binaryTreeReduce(
+	(v) => 1, (l, r) => (l + r), 
+	simpleBinaryTree
+))
+console.log("NodeCount", binaryTreeReduce(
+	(v) => 1, (l, r) => (1 + l + r), 
+	simpleBinaryTree
+))
+console.log("MinimumValue", binaryTreeReduce((v) => v, (l, r) => Math.min(l,r), simpleBinaryTree))
+console.log("MaximumValue", binaryTreeReduce((v) => v, (l, r) => Math.max(l,r), simpleBinaryTree))
+console.log("ToString", binaryTreeReduce((v) => "["+v+"]", (l, r) => "("+l+":"+r+")", simpleBinaryTree))
+</script>
+<figcaption><strong>Example:</strong> application of <code>binaryTreeReduce</code></figcaption>
+</figure>
+
+<p>
+	That worked great! We have successfully abstracted the recursion into a single <code>binaryTreeReduce</code> function. Are we done? Have we mastered the recursion scheme? Almost, but we are not quite done that. 
+</p>
+
+<h2>Other recursive data structures</h2>
+
+<p>
+	The <code>binaryTreeReduce</code> function does work for our binary tree but what if we have other recursive data structures we want to work with? For example linked lists, trees with other than exactly two branches or trees with values stored on the inner nodes as well?
+</p>
+
+<p>
+	It would be nice if we could come up with a <em>single</em> <code>recursiveReduce</code> function that works the same for all of these structures, the same way that the interface of a <code>map(fn, collection)</code> functions works for both lists, arrays, trees and other collections (more preciseley <a href="" title="Functors"> functors</a>)
+</p>
+
+<p>
+	Lets write down some of the recursive data structures we want to work with and start from there: 
+</p>
+
+<figure>
+<script type="text/javascript+notebook-cell" data-autorun="true">
+export const simpleBinaryTreeWithInnerValues = {
+	value: 6,
+	left: {value: 8, left: {value: 2} , right: {value: 3}},
+	right: {value: 9, left: {value: 5} , right: {value: 10, left: {value: 2} , right: {value: 3}}}
+}
+</script>
+<figcaption><strong>Example:</strong> binary tree with value on inner nodes</figcaption>
 </figure>
 
 
 <figure>
 <script type="text/javascript+notebook-cell" data-autorun="true">
-function range(n) {
-	if (n<=1) {
-		return [1]
-	} else {
-		return [n, ...range(n-1)]
+export const simpleLinkedList = {
+	head: 6,
+	tail: {
+		head: 8, 
+		tail: {
+			head: 3, 
+			tail: {
+				head: 5, 
+				tail: {nil: true}
+			}
+		}
 	}
 }
-
-console.log(range(10))
 </script>
-	<figcaption>recursive range</figcaption>
+<figcaption><strong>Example:</strong> binary tree with value on inner nodes</figcaption>
 </figure>
 
+<figure>
+<script type="text/javascript+notebook-cell" data-autorun="true">
+export const simpleBinaryTreeWithEmptyNodes = {
+	value: 6,
+	left: {
+		value: 8, 
+		left: {nil: true} , 
+		right: {value: 3}
+	},
+	right: {
+		value: 9, 
+		left: {nil: true}, 
+		right: {
+			value: 10, 
+			left: {nil: true}, 
+			right: {value: 3}
+		}
+	}
+}
+</script>
+<figcaption><strong>Example:</strong> binary tree with empty nodes</figcaption>
+</figure>
+
+<p>
+	Next lets try to implement the function to find the minimum element of each of these three structures. Afterwards we try to see a common pattern in each of the three implementations: 
+</p>
 
 
 <figure>
 <script type="text/javascript+notebook-cell" data-autorun="true">
-function sum(list) {
-	if (list<1) {
-		return 0
+export function binaryTreeInnerValuesMinimum(tree) {
+	if(tree.hasOwnProperty('value')) {
+		return tree.value
 	} else {
-		const [first, ...rest] = list
-		return first + sum(rest)
+		return Math.min(
+			tree.value,
+			binaryTreeInnerValuesMinimum(tree.left), 
+			binaryTreeInnerValuesMinimum(tree.right)
+		)
 	}
 }
 
-console.log(sum([1,2,3,4,5]))
+
+console.log("minimum", binaryTreeInnerValuesMinimum(simpleBinaryTreeWithInnerValues))
 </script>
-	<figcaption>recursive range</figcaption>
+<figcaption><strong>Example:</strong> finding the minimum of a binary tree with inner values</figcaption>
 </figure>
+
+<figure>
+<script type="text/javascript+notebook-cell" data-autorun="true">
+export function linkedListMinimum(fallback, list) {
+	if(list.hasOwnProperty('nil')) {
+		return fallback
+	} else {
+		return Math.min(
+			list.head, 
+			linkedListMinimum(fallback, list.tail)
+		)
+	}
+}
+console.log("minimum", linkedListMinimum(Infinity, simpleLinkedList))
+
+</script>
+<figcaption><strong>Example:</strong> finding the minimum of a linked list</figcaption>
+</figure>
+
+
+<figure>
+<script type="text/javascript+notebook-cell" data-autorun="true">
+export function binaryTreeWithEmptyNodesMinimum(fallback, tree) {
+	if(tree.hasOwnProperty('nil')) {
+		return fallback
+	} else if(tree.hasOwnProperty('left') && tree.hasOwnProperty('right')) {
+		return Math.min(
+			tree.value,
+			binaryTreeWithEmptyNodesMinimum(fallback, tree.left),
+			binaryTreeWithEmptyNodesMinimum(fallback, tree.right)
+		)
+	} else {
+		return tree.value
+	}
+}
+
+console.log("minimum", binaryTreeWithEmptyNodesMinimum(Infinity, simpleBinaryTreeWithEmptyNodes))
+
+</script>
+<figcaption><strong>Example:</strong> finding the minimum of a binary tree with maybe empty nodes</figcaption>
+</figure>
+
+<p>
+	We can observe that each function differs in the number of branches, depending on the structure of the recursive data structure. For the linked list we need only two branches, one for the nil case at the end of the list and one for the case of list having a head. For the binary tree with either an inner node with left/right children or an empty node or a leaf node with a single value, the recursive function needs to handle each of the three conditions. 
+</p>
+
+<p>
+	Also the number of arguments of the functions vary. For the tree that contains at least one leaf node with a value we do not need a fallback value. But for the other two structures we need a fallback value to return in case the structure itself does not contain any value.
+</p>
+
+<p>
+	How could we possibly unify all three of these functions into a common interface?
+</p>
 
 <h2>References</h2>
 
