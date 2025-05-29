@@ -524,7 +524,174 @@ console.log("minimum", binaryTreeWithEmptyNodesMinimum(Infinity, simpleBinaryTre
 </p>
 
 <p>
-	How could we possibly unify all three of these functions into a common interface?
+	How could we possibly unify all three of these functions into a common interface? Lets take it slowly and first implement a generic function for each of the structures individually again, as we did with <code>binaryTreeReduce</code> for the simple binary tree above:
+</p>
+
+
+<figure>
+<script type="text/javascript+notebook-cell" data-autorun="true">
+export function binaryTreeInnerValuesReduce(handleLeaf, handleInner, tree) {
+	if(tree.hasOwnProperty('value')) {
+		return handleLeaf(tree.value)
+	} else {
+		return handleInner(
+			tree.value,
+			binaryTreeInnerValuesMinimum(handleLeaf, handleInner, tree.left), 
+			binaryTreeInnerValuesMinimum(handleLeaf, handleInner, tree.right)
+		)
+	}
+}
+
+
+console.log("minimum", binaryTreeInnerValuesReduce((v) => v, (v,l,r) => Math.min(v, l, r), simpleBinaryTreeWithInnerValues))
+</script>
+<figcaption><strong>Example:</strong> generic reduction of a binary tree with inner values</figcaption>
+</figure>
+
+<figure>
+<script type="text/javascript+notebook-cell" data-autorun="true">
+export function linkedListReduce(handleLeaf, handleInner, list) {
+	if(list.hasOwnProperty('nil')) {
+		return handleLeaf()
+	} else {
+		return handleInner(
+			list.head, 
+			linkedListReduce(handleLeaf, handleInner, list.tail)
+		)
+	}
+}
+console.log("minimum", linkedListReduce(() => Infinity, (l,r) => Math.min(l,r), simpleLinkedList))
+
+</script>
+<figcaption><strong>Example:</strong> generic reduction of a linked list</figcaption>
+</figure>
+
+
+<figure>
+<script type="text/javascript+notebook-cell" data-autorun="true">
+export function binaryTreeWithEmptyNodesReduce(handleEmpty, handleLeaf, handleInner, tree) {
+	if(tree.hasOwnProperty('nil')) {
+		return handleEmpty()
+	} else if(tree.hasOwnProperty('left') && tree.hasOwnProperty('right')) {
+		return handleInner(
+			tree.value,
+			binaryTreeWithEmptyNodesReduce(handleEmpty, handleLeaf, handleInner, tree.left),
+			binaryTreeWithEmptyNodesReduce(handleEmpty, handleLeaf, handleInner, tree.right)
+		)
+	} else {
+		return handleLeaf(tree.value)
+	}
+}
+
+console.log("minimum", binaryTreeWithEmptyNodesReduce(() => Infinity, v=>v, (v,l,r) => Math.min(v, l, r), simpleBinaryTreeWithEmptyNodes))
+</script>
+<figcaption><strong>Example:</strong> generic reduction of a binary tree with maybe empty nodes</figcaption>
+</figure>
+
+<p>
+	Now we can see even more cleary that the number of needed <code>handle</code>-callbacks vary for each reduction and the even the number of argument each <code>handle</code>-callback takes, varies.
+</p>
+
+<p>
+	But what if we could merge all the callbacks into a single function and leave it for this function to handle each possible case correctly? Lets try:
+</p>
+
+
+<figure>
+<script type="text/javascript+notebook-cell" data-autorun="true">
+export function binaryTreeInnerValuesReduce(handleCases, tree) {
+	if(tree.hasOwnProperty('value')) {
+		return handleCases({value: tree.value})
+	} else {
+		return handleCases({
+			value: tree.value,
+			left: binaryTreeInnerValuesMinimum(handleCases, tree.left), 
+			right: binaryTreeInnerValuesMinimum(handleCases, tree.right)
+		})
+	}
+}
+
+
+console.log("minimum", binaryTreeInnerValuesReduce((c) => {
+	if(c.left && c.right) {
+		return Math.min(c.value, c.left, c.right)
+	} else {
+		return c.value
+	}
+}, simpleBinaryTreeWithInnerValues))
+</script>
+<figcaption><strong>Example:</strong> generic reduction of a binary tree with inner values</figcaption>
+</figure>
+
+<figure>
+<script type="text/javascript+notebook-cell" data-autorun="true">
+export function linkedListReduce(handleCases, list) {
+	if(list.hasOwnProperty('nil')) {
+		return handleCases({nil: true})
+	} else {
+		return handleCases({
+			head: list.head, 
+			tail: linkedListReduce(handleCases, list.tail)
+		})
+	}
+}
+console.log("minimum", linkedListReduce((c) => {
+	if (c.nil) {
+		return Infinity
+	} else {
+		return Math.min(c.head, c.tail)
+	}
+}, simpleLinkedList))
+
+</script>
+<figcaption><strong>Example:</strong> generic reduction of a linked list</figcaption>
+</figure>
+
+
+<figure>
+<script type="text/javascript+notebook-cell" data-autorun="true">
+export function binaryTreeWithEmptyNodesReduce(handleCases, tree) {
+	if(tree.hasOwnProperty('nil')) {
+		return handleCases({nil: true})
+	} else if(tree.hasOwnProperty('left') && tree.hasOwnProperty('right')) {
+		return handleCases({
+			value: tree.value,
+			left: binaryTreeWithEmptyNodesReduce(handleCases, tree.left),
+			right: binaryTreeWithEmptyNodesReduce(handleCases, tree.right)
+		})
+	} else {
+		return handleCases({value: tree.value})
+	}
+}
+
+console.log("minimum", binaryTreeWithEmptyNodesReduce((c => {
+	if(c.empty) {
+		return Infinity
+	} else if(c.left && c.right) {
+		return Math.min(c.value, c.left,c.right)
+	} else {
+		return c.value
+	}
+}), simpleBinaryTreeWithEmptyNodes))
+</script>
+<figcaption><strong>Example:</strong> generic reduction of a binary tree with maybe empty nodes</figcaption>
+</figure>
+
+<p>
+	Did you notice what we did here? We merged all the callback functions into a single <code>handleCases</code> callback that takes only a single value as argument. What what exactly is this argument that we pass to <code>handleCases</code>? 
+	It is either an object containing the results of the recusive function calls, or the value store in the leafs of the data structure, in case we hit a base case.
+</p>
+
+<p>
+	But look again: the value we pass to <code>handleCases</code> reflects the structure of the node we are currently processing. For example when processing an inner node of a binary tree with inner values, we call <code>handleCases({
+			value,
+			left,
+			right,
+		})</code> with <code>value</code> containing the value in the current node, but <code>left</code> and <code>right</code> <strong>not</strong> containing the sub trees of the original tree, but instead the already calculated results of the two recursive calls.
+</p>
+
+<p>
+	What we pass to the <code>handleCases</code> looks structurally like a node of the the tree but instead it is just a flat container for the the results of the recursive function calls.
 </p>
 
 <h2>References</h2>
