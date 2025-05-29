@@ -24,1370 +24,199 @@ a {
 <h1><img src="favicon.svg" alt="" style="height: 1em; vertical-align: text-bottom;"> Recursion Schemes</h1>
 
 <p>
-	This is a simple and practical introduction to recursion schemes in functional programming.
+	This is a simple and practical introduction to <a href="https://github.com/passy/awesome-recursion-schemes">recursion schemes</a> in functional programming.
 </p>
-
 
 <p>
-	Recursion schemes are a technique in functional programming to construct recursive functions via composition of predefined patterns instead of writing the recursive function body by hand.  
+	Recursion schemes are higher order functions that can be used as building blocks for composing recursive algorithms. A recursion scheme separates the recursive part of a function from the actual calculation the same way the <code>Array.map</code> separates the the iteration from the calculation that should be done on each element.
 </p>
-
-<h2>Motivation</h2>
-
-Before we start lets build up some motivation by comparion to <code>for</code>-loops and higher order functions like <code>map</code> and <code>filter</code>.
-
-<h3><code>while</code>- and <code>for</code>-loop</h3>
 
 <p>
-	If you are familiar with <code>for</code>-loops and <code>while</code>-loops in procedural programming you can think of recursion schemes as corresponding to handwritten recursion the same way that <code>for</code>- or <code>foreach</code>- loops correspond to <code>while</code>-loops or <code>goto</code> statements. 
+	Higher order functions like <code>map</code>, <code>filter</code> and <code>reduce</code> are well known and nowadays even common in many procuderal programming languages. Even though <code>reduce</code> can actually be seen as an example of a recursion scheme, the general concept of recursion schemes is not well known among programmers.
 </p>
 
+<p>
+	When working with lists or collections in general, many people might think of higher order functions like <code>map</code>, <code>filter</code> and <code>reduce</code> instead of writing <code>while</code>- or <code>for</code>-loops by hand. These functions are seens as more elegant, more succinct and more expressive. They avoid mistakes like off-by-one-errors and expression assumtions about invariants like the <code>map</code> operation not effecting the length of a collection or the resuld of <code>filter</code> not modifying the elements. 
+</p>
+
+<p>
+	But when working with recursive algorithms (like mergesort, quicksort, binary-search) many people would still write the recursion by hand (or translate the recursive algorithm into an iterative one). This article act as an introduction to recursion schemes that guide you to to come up with higher order functions similar to <code>map</code>, <code>filter</code> and <code>reduce</code> for working with recursive data structures. Spoiler: They will be called <code>cata</code>, <code>ana</code> and <code>hylo</code>.
+</p>
+
+<h2>Recap: Comparing manual interation to higher-order-functions</h2>
+
+<p>
+	Before exploring recursive functions lets take another look at the higher order functions <code>map</code>, <code>filter</code> and <code>reduce</code> to convince us that they help us to write more readable and concise code.
+</p>
+
+<p>
+	Take a look at the following two examples. The first one is implemented in an imperative style using a <code>for</code>-loop, the second one uses the highter order functions to abstract from the iteration and only specify the transformations to be applied to the elements.
+</p>
+
+<figure>
 <script type="text/javascript+notebook-cell" data-autorun="true">
-// A function to sum all numbers from 0 to n (inclusive)
-function sumUpToWhile(n) {
-	let result = 0;
-	let counter = 0;
-	while(counter <= n) {
-		result += counter
-		counter++
+function imperativeExample(list) {
+	let result = 0
+
+	for(let i=1;i<list.length;i++) {
+		if (list[i] % 2 == 0) {
+			result += list[i] / 2
+		}
 	}
 
 	return result
 }
 
-console.log(sumUpToWhile(10))
+console.log(imperativeExample([0,3,6,7,4,2,1,8]))
+// did you spot the mistake
 </script>
+	<figcaption>processing a list imperatively</figcaption>
+</figure>
 
+<figure>
 <script type="text/javascript+notebook-cell" data-autorun="true">
-// A function to sum all numbers from 0 to n (inclusive)
-function sumUpToFor(n) {
-	let result = 0;
-	
-	// The intent of counting from 0 to n is expressed
-	// more clearly
-	for(let counter=0;counter<=n;counter++) {
-		result += counter
-	}
-
-	return result
+function mapFilterReduceExample(list) {
+	return list
+		.filter(v => v  % 2 == 0)
+		.map(v => v / 2)
+		.reduce((a,b) => a+b, 0)
 }
 
-console.log(sumUpToFor(10))
+console.log(mapFilterReduceExample([0,3,6,7,4,2,1,8]))
 </script>
+	<figcaption>processing of a list using higher order functions</figcaption>
+</figure>
 
-
+<details>
+	<summary>But did you spot the mistake in the imperative appraoch?</summary>
+	<p>
+		The counter starts and <code>i=1</code> and skips the first element of the list.
+	</p>
+</details>
 
 <p>
-	<code>while</code>-loops and <code>goto</code>-statements allow unbounded repeatition and unrestricted branching of the control flow of a program. By using a <code>for</code>-loop you recognize that in many cases you do not need the unbounded freedom of a <code>while</code> loop but instead want the repeatition to happen a predetermined number of times. Every for-loop could in principle also be written as while loop and every while loop could be written via goto statements. But by using a for-loop the intent of iterating a fixed number of times while keeping track of a iteration counter is expressed more clearly and common mistakes like off-by-one errors are easier to be spotted. 
+	Both functions sum all the even elements of the list devided by two. In the imperative version the iteration (initializing <code>i=0</code>, incrementing <code>i</code> and terminating the loop if <code>i</code> reaches the length of the list) is mixed up with the calculation done on the elements of the list. This can be seen as a violation of the principle of separation of concerns.
 </p>
 
 <p>
-	You may also be familiar with functions like <code>map</code>, <code>filter</code> and <code>reduce</code>. These higher order functions have their origins in functional programming but are now also available in many procedural and object oriented languages. 
+	If you are not familiar with these highter order functions lets think about how you could implement them yourself:
 </p>
 
-<p>
-	They can be seen as an additional abstraction beyond <code>for</code> and <code>foreach</code> loops in that they hide the ceremony of iterating, incrementing counters and accumulating a result. The <code>map</code> function expresses the the intent of transforming each element of a collection and gathering all the results into a new collection of the same size as the original collection. The <code>filter</code> function expresses the intent to select only a subset of elements from a collection but keeping each of the selected elements as is. The <code>reduce</code> function expresses the intent to caculate a single summarizing value from all of the elements in a collection. 
-</p>
-
+<figure>
 <script type="text/javascript+notebook-cell" data-autorun="true">
-function doubleEachNumberWhile(array) {
-	const result = []
-	let index = 0
-
-	while(index<array.length) {
-		result.push(array[index] * 2)
-		index++
-	}
-
-	return result
-}
-
-console.log(doubleEachNumberWhile([5,7,9]))
-</script>
-
-<script type="text/javascript+notebook-cell" data-autorun="true">
-function doubleEachNumberFor(array) {
+function map(fn, list) {
 	const result = []
 
-	for(let index = 0;index<array.length;index++) {
-		result.push(array[index] * 2)
+	for(let i=0;i<list.length;i++) {
+		result.push(fn(list[i]))
 	}
 
 	return result
 }
 
-console.log(doubleEachNumberFor([5,7,9]))
-</script>
-
-<script type="text/javascript+notebook-cell" data-autorun="true">
-function doubleEachNumberForOf(array) {
+function filter(fn, list) {
 	const result = []
 
-	for(let element of array) {
-		result.push(element * 2)
+	for(let i=0;i<list.length;i++) {
+		if(fn(list[i])) {
+			result.push(list[i])
+		}
 	}
 
 	return result
 }
 
-console.log(doubleEachNumberForOf([5,7,9]))
-</script>
+function reduce(fn, init, list) {
+	let result = init
 
-<script type="text/javascript+notebook-cell" data-autorun="true">
-function doubleEachNumberMap(array) {
-	return array.map((x) => x*2)
-}
-
-console.log(doubleEachNumberMap([5,7,9]))
-</script>
-
-
-<p>
-	Each of the goals of <code>map</code>, <code>filter</code> and <code>reduce</code> could also be achieved via a handwritten <code>while</code> or <code>for</code> loop. The advantage of using predefined functions in each case is to express the intent for clearly, communicating expactations and guarantees and by doing so preventing common mistakes.
-</p>
-
-<p>
-	Take a look at the following implemention and guess what will be the result.
-</p>
-
-<script type="text/javascript+notebook-cell" data-autorun="false">
-function doubleEachNumberWTF(array) {
-	const result = []
-
-	for(let element of array) {
-		result.push(0, element * 2)
+	for(let i=0;i<list.length;i++) {
+		result = fn(result, list[i])
 	}
 
 	return result
 }
 
-// What will this return?
-console.log(doubleEachNumberWTF([5,7,9]))
+function pipe(arg, ...fns) {
+	return reduce((a,b) => b(a), arg, fns)
+}
+
+console.log(pipe(
+	[0,3,6,7,4,2,1,8], 
+	(l) => filter(v => v  % 2 == 0, l),
+	(l) => map(v => v / 2, l),
+	(l) => reduce((a,b) => a+b, 0,  l),
+))
+
+
 </script>
+	<figcaption>implementation of map, filter and reduce</figcaption>
+</figure>
 
 <p>
-	Did you catch the mistake? Maybe you did, but you might agree that mixing the responsibility of multiplying an element by two and collecting all the results into a single function makes it hard to track what exactly is happening an how the result will look like.
+	When comparing our implementations of the 3 functions with with imperative implementation of <code>imperativeExample</code> above we can notice that each of the three functions captures a small part of the <code>for</code>-loop and that these parts are then recomposed by composing the functions.
+</p>
+
+<h2>Recursive functions</h2>
+
+<p>
+	Our goal is now to apply this separation between <em>calculation per step</em> and <code>doing the stepping</code> for recursive functions as well. This will lead us to discover common patterns in recursion, similar to <code>map</code>, <code>filter</code> and <code>reduce</code>.
 </p>
 
 <p>
-	Lets take a look at at few typical recursive functions:
+	First lets take a look at some recursive functions:
 </p>
 
+<figure>
 <script type="text/javascript+notebook-cell" data-autorun="true">
-function factorialRec(n) {
-	if(n<2) {
+
+function factorial(n) {
+	if (n<=1) {
 		return 1
 	} else {
-		return n * factorialRec(n-1)
+		return n * factorial(n-1)
 	}
 }
 
-console.log(factorialRec(10))
-</script>
+console.log(factorial(10))
 
+
+</script>
+	<figcaption>recursive factorial</figcaption>
+</figure>
+
+
+<figure>
 <script type="text/javascript+notebook-cell" data-autorun="true">
-function factorialRecAcc(n, acc) {
-	if(n<2) {
-		return acc
+function range(n) {
+	if (n<=1) {
+		return [1]
 	} else {
-		return factorialRecAcc(n-1, acc*n)
+		return [n, ...range(n-1)]
 	}
 }
 
-console.log(factorialRecAcc(10, 0))
+console.log(range(10))
 </script>
+	<figcaption>recursive range</figcaption>
+</figure>
 
+
+
+<figure>
 <script type="text/javascript+notebook-cell" data-autorun="true">
-function sumUpTo(n) {
-	if(n < 1) {
+function sum(list) {
+	if (list<1) {
 		return 0
 	} else {
-		return sumUpTo(n-1) + n
+		const [first, ...rest] = list
+		return first + sum(rest)
 	}
 }
 
-console.log(sumUpTo(10))
+console.log(sum([1,2,3,4,5]))
 </script>
-
-<script type="text/javascript+notebook-cell" data-autorun="true">
-function sumUpToAcc(n, acc) {
-	if(n < 1) {
-		return acc
-	} else {
-		return sumUpToAcc(n-1, acc + n)
-	}
-}
-
-console.log(sumUpToAcc(10, 0))
-</script>
-
-<p>
-	The functions above are indeed defined recursively but they just compute a single value with not inner structure. Each of these function also have been defined iterativly using <code>while</code>, <code>for</code>-loops. Most imperative programmers would argue that for performance reasons that should have been done anyway.
-</p>
-
-<p>
-	A more interesting and more common use case for recursive functions is to work with recursive data structures like trees or linked lists. Lets define a few of those structures:
-</p>
-
-<script type="text/javascript+notebook-cell" data-autorun="true">
-export const binaryTreeWithDataInLeafs = {
-	left: {
-		left: {value: 3},
-		right: {
-			left: {
-				left: {value: 7},
-				right: {value: 5},
-			},
-			right: {value: 2},
-		},
-	},
-	right: {
-		left: {
-			left: {value: 1},
-			right: {value: 6},
-		},
-		right: {
-			left: {value: 5},
-			right: {value: 9},
-		},
-	},
-}
-</script>
-
-<script type="text/javascript+notebook-cell" data-autorun="true">
-export const binaryTreeWithInnerData = {
-	value: 10,
-	left: {
-		value: 3,
-		left: {value: 5, left: {nil: true}, right: {nil: true}},
-		right: {
-			value: 4,
-			left: {
-				value: 6,
-				left: {value: 1, left: {nil: true}, right: {nil: true}},
-				right: {value: 2, left: {nil: true}, right: {nil: true}},
-			},
-			right: {value: 7, left: {nil: true}, right: {nil: true}},
-		},
-	},
-	right: {
-		value: 9,
-		left: {
-			value: 3,
-			left: {value: 8, left: {nil: true}, right: {nil: true}},
-			right: {value: 2, left: {nil: true}, right: {nil: true}},
-		},
-		right: {
-			value: 7,
-			left: {value: 5, left: {nil: true}, right: {nil: true}},
-			right: {value: 9, left: {nil: true}, right: {nil: true}},
-		},
-	},
-}
-</script>
-
-<script type="text/javascript+notebook-cell" data-autorun="true">
-export const linkedList = {
-	head: 4,
-	tail: {
-		head: 8,
-		tail: {
-			head: 15,
-			tail: {
-				head: 16,
-				tail: {
-					nil: true
-				}
-			}
-		}
-	}
-}
-</script>
-
-<p>
-	Let us also define a simple JavaScript array to contain some numbers:
-</p>
-
-<script type="text/javascript+notebook-cell" data-autorun="true">
-export const simpleArray = [4,8,15,16,23,42]
-</script>
-
-<p>
-	Lets say we want to sum all the elements in each of these structures. Starting with the easy part of summing thee numbers in the array. Here we can use either a imperative loop construct or a built in higher order function like <code>reduce</code>:
-</p>
-
-<script type="text/javascript+notebook-cell" data-autorun="true">
-function sumOfArrayLoop(arr) {
-	let sum = 0
-	for (let i=0;i<arr.length;i++) {
-		sum += arr[i]
-	}
-
-	return sum
-}
-
-function sumOfArrayReduce(arr) {
-	return arr.reduce((acc,el) =>acc+el, 0)
-}
-
-console.log(sumOfArrayLoop(simpleArray))
-console.log(sumOfArrayReduce(simpleArray))
-</script>
-
-<p>
-	Or we could even implement a custom recursive iteration through the array:
-</p>
-
-<script type="text/javascript+notebook-cell" data-autorun="true">
-function sumOfArrayRecursive(arr) {
-	if(arr.length === 0) {
-		return 0
-	} else {
-		const [first, ...rest] = arr
-		return first + sumOfArrayRecursive(rest)
-	}
-}
-
-function sumOfArrayRecursiveAcc(arr, acc) {
-	if(arr.length === 0) {
-		return acc
-	} else {
-		const [first, ...rest] = arr
-		return sumOfArrayRecursiveAcc(rest, acc + first)
-	}
-}
-
-
-console.log(sumOfArrayRecursive(simpleArray))
-console.log(sumOfArrayRecursiveAcc(simpleArray, 0))
-</script>
-
-
-<p>
-	For summing the array the preferred way to sume the array would of course be the usage of <code>reduce</code>. But when it somes to the recursive datastructures like our <code>binaryTreeWithDataInLeafs</code>, <code>binaryTreeWithInnerData</code> and <code>linkedList</code> there is no builtit reduce functions that takes care of the iteration for us. So we have to handroll each implementation:
-</p>
-
-
-<script type="text/javascript+notebook-cell" data-autorun="true">
-function sumOfTreeLeaf(tree) {
-	if(tree.hasOwnProperty("value")) {
-		return tree.value
-	} else {
-		return sumOfTreeLeaf(tree.left) + sumOfTreeLeaf(tree.right)
-	}
-}
-
-function sumOfTreeWithInner(tree) {
-	if(tree.hasOwnProperty("nil")) {
-		return 0
-	} else if(tree.hasOwnProperty("left") && tree.hasOwnProperty("right")) {
-		return tree.value + sumOfTreeWithInner(tree.left) + sumOfTreeWithInner(tree.right)
-	} else {
-		return tree.value
-	}
-}
-
-function sumOfLinkedList(list) {
-	if(list.hasOwnProperty("nil")) {
-		return 0
-	} else {
-		return list.head + sumOfLinkedList(list.tail)
-	}
-}
-
-
-console.log(sumOfTreeLeaf(binaryTreeWithDataInLeafs))
-console.log(sumOfTreeWithInner(binaryTreeWithInnerData))
-console.log(sumOfLinkedList(linkedList))
-
-</script>
-
-<p>
-	We could also try to come up with tail recursive iteration strategies but this will not work for the left/right branching structure in a tree only one of the two recursive calls can be in tail position:
-</p>
-
-<script type="text/javascript+notebook-cell" data-autorun="true">
-function sumOfTreeLeafAcc(tree, acc) {
-	if(tree.hasOwnProperty("value")) {
-		return tree.value + acc
-	} else {
-		return sumOfTreeLeafAcc(tree.right, sumOfTreeLeafAcc(tree.left, acc))
-	}
-}
-
-function sumOfTreeWithInnerAcc(tree, acc) {
-	if(tree.hasOwnProperty("nil")) {
-		return acc
-	} else if(tree.hasOwnProperty("left") && tree.hasOwnProperty("right")) {
-		return sumOfTreeWithInnerAcc(tree.right, sumOfTreeWithInnerAcc(tree.left, acc + tree.value))
-	} else {
-		return tree.value + acc
-	}
-}
-
-function sumOfLinkedListAcc(list, acc) {
-	if(list.hasOwnProperty("nil")) {
-		return acc
-	} else {
-		return sumOfLinkedListAcc(list.tail, acc + list.head)
-	}
-}
-
-
-console.log(sumOfTreeLeafAcc(binaryTreeWithDataInLeafs, 0))
-console.log(sumOfTreeWithInnerAcc(binaryTreeWithInnerData, 0))
-console.log(sumOfLinkedListAcc(linkedList, 0))
-</script>
-
-<p>
-	Now lets say we do not want to sum all the elements inside each datastructure but instead calculate their product or concatenate them as strings to serialize and print out each data structure. The solution seems to simply come up with a generic <code>reduce</code>-like function for each of our structures, that takes a accumulation function that combines all elements of the structure into a single value, instead of hardcoding the addition.
-</p>
-
-<script type="text/javascript+notebook-cell" data-autorun="true">
-function reduceOfTreeLeaf(fn, init, tree) {
-	if(tree.hasOwnProperty("value")) {
-		return fn(init, tree.value)
-	} else {
-		return fn(reduceOfTreeLeaf(fn, init, tree.left), reduceOfTreeLeaf(fn, init, tree.right))
-	}
-}
-
-function reduceOfTreeWithInner(fn, init, tree) {
-	if(tree.hasOwnProperty("nil")) {
-		return init
-	} else if(tree.hasOwnProperty("left") && tree.hasOwnProperty("right")) {
-		return fn(tree.value, fn(reduceOfTreeWithInner(fn, init, tree.left),reduceOfTreeWithInner(fn, init, tree.right)))
-	} else {
-		return fn(init, tree.value)
-	}
-}
-
-function reduceOfLinkedList(fn, init, list) {
-	if(list.hasOwnProperty("nil")) {
-		return init
-	} else {
-		return fn(list.head, reduceOfLinkedList(fn, init, list.tail))
-	}
-}
-
-
-console.log(reduceOfTreeLeaf((a,b) => a+b, 0, binaryTreeWithDataInLeafs))
-console.log(reduceOfTreeWithInner((a,b) => a+b, 0, binaryTreeWithInnerData))
-console.log(reduceOfLinkedList((a,b) => a+b, 0, linkedList))
-
-console.log(reduceOfTreeLeaf((a,b) => a*b, 1, binaryTreeWithDataInLeafs))
-console.log(reduceOfTreeWithInner((a,b) => a*b, 1, binaryTreeWithInnerData))
-console.log(reduceOfLinkedList((a,b) => a*b, 1, linkedList))
-
-console.log(reduceOfTreeLeaf((a,b) => `<${a}:${b}>`, 'Leaf', binaryTreeWithDataInLeafs))
-console.log(reduceOfTreeWithInner((a,b) => `<${a}:${b}>`, 'Leaf', binaryTreeWithInnerData))
-console.log(reduceOfLinkedList((a,b) => `${a} :: ${b}`, 'NIL', linkedList))
-
-</script>
-
-<p>
-	This almost seems to work. We could not replace your summation (<code>+</code>) with an arbitrary binary function. At least for calculating the product of the elements we got the correct result. For the <code>linkedList</code> we also got the correct string concatination showing use the sequency of all elements. But for the tree structures the result is not exactly what we want.
-</p>
-
-<p>
-	The binary function that our reducers takes as argument is not a good fit for the branching structure of the trees. For the binary without elements on the inner nodes the binary function can not reflect the unary structure of the leafs correctly. For the the binary tree with elements at each inner leaf it is even worse: the binary function can not handle the balanced triple-concatination of the left branch, the current value and the right branch correctly. This is because in our implementation of reduceOfTreeWithInner we had to call the `fn` twice.
-</p>
-
-<p>
-	I summary we can observe that the interface of our <code>reduce</code> function with the binary reduction operation as argument is not expressive enough to capture all three kinds of recursive data structures. 
-</p>
-
-<p>
-	Lets try again.
-</p>
-
-<script type="text/javascript+notebook-cell" data-autorun="true">
-function reduceOfTreeLeaf(handleLeaf, handleBranch, tree) {
-	if(tree.hasOwnProperty("value")) {
-		return handleLeaf(tree.value)
-	} else {
-		return handleBranch(reduceOfTreeLeaf(handleLeaf, handleBranch, tree.left), reduceOfTreeLeaf(handleLeaf, handleBranch, tree.right))
-	}
-}
-
-function reduceOfTreeWithInner(handleNil, handleValue, handleBranch, tree) {
-	if(tree.hasOwnProperty("nil")) {
-		return handleNil()
-	} else if(tree.hasOwnProperty("left") && tree.hasOwnProperty("right")) {
-		return handleBranch(tree.value, reduceOfTreeWithInner(handleNil, handleValue, handleBranch, tree.left),reduceOfTreeWithInner(handleNil, handleValue, handleBranch, tree.right))
-	} else {
-		return handleValue(tree.value)
-	}
-}
-
-function reduceOfLinkedList(handleHead, handleNil, list) {
-	if(list.hasOwnProperty("nil")) {
-		return handleNil()
-	} else {
-		return handleHead(list.head, reduceOfLinkedList(handleHead, handleNil, list.tail))
-	}
-}
-
-
-console.log(reduceOfTreeLeaf((v) => v, (a,b) => a+b, binaryTreeWithDataInLeafs))
-console.log(reduceOfTreeWithInner(() => 0, v => v, (a,b) => a+b, binaryTreeWithInnerData))
-console.log(reduceOfLinkedList((a,b) => a+b, () => 0, linkedList))
-
-console.log(reduceOfTreeLeaf((v) => v, (a,b) => a*b, binaryTreeWithDataInLeafs))
-console.log(reduceOfTreeWithInner(() => 1, v => v, (v, l,r) => v*l*r, binaryTreeWithInnerData))
-console.log(reduceOfLinkedList((a,b) => a*b, () => 1, linkedList))
-
-console.log(reduceOfTreeLeaf((v) => v, (a,b) => `<${a}:${b}>`, binaryTreeWithDataInLeafs))
-console.log(reduceOfTreeWithInner(() => "!", v => v, (v, l, r) => `<${l}:${v}:${r}>`, binaryTreeWithInnerData))
-console.log(reduceOfLinkedList((a,b) => `${a} :: ${b}`, () => 'NIL', linkedList))
-
-</script>
-
-<p>
-	Instead of passing a single binary function and an initial value to each reducer we pass a specific function for each recursion case that might occur. Notice how <code>reduceOfTreeWithInner</code> now expects 3 functions, one for handling the empty leaf case, one for handling the single value leaf case and one for handling the inner node with two children an a value case. The latter one taking 3 instead of two arguments. 
-</p>
-
-<p>
-	But now the interfaces of the <code>reduce</code> function differ between each of the 3 data structures. It would be preferable if we could provide a common reduction interface for all three (and future) datatypes, the same way as the <code>map</code> function is typically defined for all kinds of datatypes in a uniform way. Lets try:
-</p>
-
-
-<script type="text/javascript+notebook-cell" data-autorun="true">
-function reduceOfTreeLeaf(handleCases, tree) {
-	if(tree.hasOwnProperty("value")) {
-		return handleCases(tree)
-	} else {
-		return handleCases({
-			left: reduceOfTreeLeaf(handleCases, tree.left),
-			right: reduceOfTreeLeaf(handleCases, tree.right),
-		})
-	}
-}
-
-function reduceOfTreeWithInner(handleCases, tree) {
-	if(tree.hasOwnProperty("nil")) {
-		return handleCases(tree)
-	} else if(tree.hasOwnProperty("left") && tree.hasOwnProperty("right")) {
-		return handleCases({
-			value: tree.value, 
-			left: reduceOfTreeWithInner(handleCases, tree.left),
-			right: reduceOfTreeWithInner(handleCases, tree.right),
-		})
-	} else {
-		return handleCases(tree)
-	}
-}
-
-function reduceOfLinkedList(handleCases, list) {
-	if(list.hasOwnProperty("nil")) {
-		return handleCases(list)
-	} else {
-		return handleCases({
-			head: list.head,
-			tail: reduceOfLinkedList(handleCases, list.tail)
-		})
-	}
-}
-
-console.log(reduceOfTreeLeaf((t) => {
-	if(t.hasOwnProperty("value")) {
-		return t.value
-	} else {
-		return t.left + t.right
-	}
-}, binaryTreeWithDataInLeafs))
-console.log(reduceOfTreeWithInner((t) => {
-	if(t.hasOwnProperty("nil")) {
-		return 0
-	} else if(t.hasOwnProperty("left") && t.hasOwnProperty("left")) {
-		return t.value + t.left + t.right
-	} else {
-		return t.value
-	}
-}, binaryTreeWithInnerData))
-console.log(reduceOfLinkedList((l) => {
-	if(l.hasOwnProperty("nil")) {
-		return 0
-	} else {
-		return l.head + l.tail
-	}
-}
-, linkedList))
-
-console.log(reduceOfTreeLeaf((t) => {
-	if(t.hasOwnProperty("value")) {
-		return t.value
-	} else {
-		return t.left * t.right
-	}
-}, binaryTreeWithDataInLeafs))
-console.log(reduceOfTreeWithInner((t) => {
-	if(t.hasOwnProperty("nil")) {
-		return 1
-	} else if(t.hasOwnProperty("left") && t.hasOwnProperty("left")) {
-		return t.value * t.left * t.right
-	} else {
-		return t.value
-	}
-}, binaryTreeWithInnerData))
-console.log(reduceOfLinkedList((l) => {
-	if(l.hasOwnProperty("nil")) {
-		return 1
-	} else {
-		return l.head * l.tail
-	}
-}
-, linkedList))
-
-
-console.log(reduceOfTreeLeaf((t) => {
-	if(t.hasOwnProperty("value")) {
-		return t.value
-	} else {
-		return "<"+t.left + ":" +  t.right +">"
-	}
-}, binaryTreeWithDataInLeafs))
-console.log(reduceOfTreeWithInner((t) => {
-	if(t.hasOwnProperty("nil")) {
-		return "!"
-	} else if(t.hasOwnProperty("left") && t.hasOwnProperty("left")) {
-		return "<" + t.left + ":" + t.value + ":" + t.right + ">"
-	} else {
-		return t.value
-	}
-}, binaryTreeWithInnerData))
-console.log(reduceOfLinkedList((l) => {
-	if(l.hasOwnProperty("nil")) {
-		return "NIL"
-	} else {
-		return l.head + " :: " + l.tail
-	}
-}
-, linkedList))
-</script>
-
-
-
-<script type="text/javascript+notebook-cell" data-autorun="true">
-export const someNumberArray = [1,2,3,4]
-export const someBooleanArray = [true, false, false, true, true, false]
-</script>
-
-<script type="text/javascript+notebook-cell" data-autorun="true">
-function sumOfArrayRecursive(list) {
-	if (list.length === 0) {
-		return 0
-	} else {
-		return list[0] + sumOfArrayRecursive(list.slice(1))
-	}
-}
-
-console.log(sumOfArrayRecursive(someNumberArray))
-</script>
-
-<script type="text/javascript+notebook-cell" data-autorun="true">
-function sumOfArrayRecursiveAccumulatedHelper(list, acc) {
-	if (list.length === 0) {
-		return acc
-	} else {
-		return sumOfArrayRecursiveAccumulatedHelper(list.slice(1), acc + list[0])
-	}
-}
-
-function sumOfArrayTailRecursive(list) {
-	return sumOfArrayRecursiveAccumulatedHelper(someNumberArray, 0)
-}
-
-console.log(sumOfArrayTailRecursive(someNumberArray))
-</script>
-
-<script type="text/javascript+notebook-cell" data-autorun="true">
-
-function sumOfArrayReduce(list) {
-	const sum = (a,b) => a+b
-	return list.reduce(sum, 0)
-}
-
-console.log(sumOfArrayReduce(someNumberArray))
-</script>
-
-<script type="text/javascript+notebook-cell" data-autorun="true">
-
-
-function fold(fn, init, list) {
-	if (list.length === 0) {
-		return init
-	} else {
-		return fn(list[0], fold(fn, init, list.slice(1)))
-	}
-}
-
-function sumOfArrayReduce(list) {
-	const sum = (a,b) => a+b
-	return fold(sum, 0, list)
-}
-
-console.log(sumOfArrayReduce(someNumberArray))
-</script>
-
-
-<script type="text/javascript+notebook-cell" data-autorun="true">
-
-function foldAccumulationHelper(fn, list, acc) {
-	if (list.length === 0) {
-		return acc
-	} else {
-		return foldAccumulationHelper(fn, list.slice(1), fn(acc, list[0]))
-	}
-}
-
-export function fold(fn, init, list) {
-	return foldAccumulationHelper(fn, list, init)
-}
-
-function sumOfArrayReduce(list) {
-	const sum = (a,b) => a+b
-	return fold(sum, 0, list)
-}
-
-console.log(sumOfArrayReduce(someNumberArray))
-</script>
-
-<script type="text/javascript+notebook-cell" data-autorun="true">
-
-function productOfArrayReduce(list) {
-	const sum = (a,b) => a*b
-	return fold(sum, 1, list)
-}
-
-console.log(productOfArrayReduce(someNumberArray))
-</script>
-
-<script type="text/javascript+notebook-cell" data-autorun="true">
-
-function maxOfArrayReduce(list) {
-	const sum = (a,b) => Math.max(a,b)
-	return fold(sum, -Infinity, list)
-}
-
-console.log(maxOfArrayReduce(someNumberArray))
-</script>
-
-<script type="text/javascript+notebook-cell" data-autorun="true">
-
-function minOfArrayReduce(list) {
-	const sum = (a,b) => Math.min(a,b)
-	return fold(sum, Infinity, list)
-}
-
-console.log(minOfArrayReduce(someNumberArray))
-</script>
-
-<script type="text/javascript+notebook-cell" data-autorun="true">
-
-function findOfArrayReduce(list, pred) {
-	const sum = (a,b) => a !== null ? a : pred(b) ? b : null
-	return fold(sum, null, list)
-}
-
-console.log(findOfArrayReduce(someNumberArray, (x) => x > 2))
-</script>
-
-<script type="text/javascript+notebook-cell" data-autorun="true">
-
-function anyOfArrayReduce(list) {
-	const sum = (a,b) => a || b
-	return fold(sum, false, list)
-}
-
-function allOfArrayReduce(list) {
-	const sum = (a,b) => a && b
-	return fold(sum, true, list)
-}
-
-
-console.log(anyOfArrayReduce(someBooleanArray))
-console.log(allOfArrayReduce(someBooleanArray))
-</script>
-
-<script type="text/javascript+notebook-cell" data-autorun="true">
-
-function minOfArrayReduce(list) {
-	const sum = (a,b) => Math.min(a,b)
-	return fold(sum, Infinity, list)
-}
-
-console.log(minOfArrayReduce(someNumberArray))
-</script>
-
-<script type="text/javascript+notebook-cell" data-autorun="true">
-
-export function stringOfArrayReduce(list) {
-	const sum = (a,b) => a ? `${a},${b}` : b
-	return fold(sum, '', list)
-}
-
-console.log(stringOfArrayReduce(someNumberArray))
-</script>
-
-<script type="text/javascript+notebook-cell" data-autorun="true">
-export const someBinaryTree = {
-	left: {
-		left: {value: 3},
-		right: {
-			left: {value: 4},
-			right: {value: 7}
-		}
-	}, 
-	right: {
-		left: {value: 2},
-		right: {value: 6}
-	}
-}
-
-export const someBooleanTree = {
-	left: {
-		left: {value: true},
-		right: {
-			left: {value: false},
-			right: {value: true}
-		}
-	}, 
-	right: {
-		left: {value: true},
-		right: {value: false}
-	}
-}
-</script>
-
-<script type="text/javascript+notebook-cell" data-autorun="true">
-
-
-export function foldTree(branchFn, leafFn, tree) {
-	if (tree.hasOwnProperty("value")) {
-		return leafFn(tree.value)
-	} else {
-		const leftFolded = foldTree(branchFn, leafFn, tree.left)
-		const rightFolded = foldTree(branchFn, leafFn, tree.right)
-		return branchFn(leftFolded, rightFolded)
-	}
-}
-
-function sumOfTreeReduce(tree) {
-	const leaf = (v) => v
-	const combine = (a,b) => a + b
-	return foldTree(combine, leaf, tree)
-}
-
-function stringSumOfTreeReduce(tree) {
-	const leaf = (v) => `${v}`
-	const combine = (a,b) => `${a} + ${b}`
-	return foldTree(combine, leaf, tree)
-}
-
-console.log(stringSumOfTreeReduce(someBinaryTree) + " = " + sumOfTreeReduce(someBinaryTree))
-</script>
-
-
-<script type="text/javascript+notebook-cell" data-autorun="true">
-
-
-function productOfTreeReduce(tree) {
-	const leaf = (v) => v
-	const combine = (a,b) => a*b
-	return foldTree(combine, leaf, tree)
-}
-
-function minOfTreeReduce(tree) {
-	const leaf = (v) => v
-	const combine = (a,b) => Math.min(a,b)
-	return foldTree(combine, leaf, tree)
-}
-
-export function stringOfTreeReduce(tree) {
-	const leaf = (v) => v
-	const combine = (a,b) => `<${a}:${b}>`
-	return foldTree(combine, leaf, tree)
-}
-
-
-function maxOfTreeReduce(tree) {
-	const leaf = (v) => v 
-	const combine = (a,b) => Math.max(a,b)
-	return foldTree(combine, leaf, tree)
-}
-
-function allOfTreeReduce(tree) {
-	const leaf = (v) => v === true
-	const combine = (a,b) => a && b
-	return foldTree(combine, leaf, tree)
-}
-
-function anyOfTreeReduce(tree) {
-	const leaf = (v) => v === true
-	const combine = (a,b) => a || b
-	return foldTree(combine, leaf, tree)
-}
-
-console.log(stringOfTreeReduce(someBinaryTree))
-
-console.log(productOfTreeReduce(someBinaryTree))
-console.log(minOfTreeReduce(someBinaryTree))
-console.log(maxOfTreeReduce(someBinaryTree))
-console.log(allOfTreeReduce(someBooleanTree))
-console.log(anyOfTreeReduce(someBooleanTree))
-</script>
-
-<script type="text/javascript+notebook-cell" data-autorun="true">
-export const someLinkedList = {
-	head: 5,
-	tail: {
-		head: 4, 
-		tail: {
-			head: 3, 
-			tail: {
-				head: 7, 
-				tail: {
-					head: 6, 
-					tail: {nil: true}
-				}
-			}
-		}
-	}
-}
-
-export const someBooleanLinkedList = {
-	head: true,
-	tail: {
-		head: false, 
-		tail: {
-			head: true, 
-			tail: {
-				head: true, 
-				tail: {
-					head: false, 
-					tail: {nil: true}
-				}
-			}
-		}
-	}
-}
-</script>
-
-<script type="text/javascript+notebook-cell" data-autorun="true">
-
-
-export function foldLinkedList(branchFn, init, linkedList) {
-	if (linkedList.nil) {
-		return init()
-	} else {
-		const rightFolded = foldLinkedList(branchFn, init, linkedList.tail)
-		return branchFn(linkedList.head, rightFolded)
-	}
-}
-
-function sumOfLinkedListReduce(linkedList) {
-	const leaf = () => 0
-	const combine = (a,b) => a + b
-	return foldLinkedList(combine, leaf, linkedList)
-}
-
-function stringSumOfLinkedListReduce(linkedList) {
-	const leaf = (v) => `0`
-	const combine = (a,b) => `${a} + ${b}`
-	return foldLinkedList(combine, leaf, linkedList)
-}
-
-export function stringOfLinkedListReduce(linkedList) {
-	const leaf = (v) => `NIL`
-	const combine = (a,b) => `${a} :: ${b}`
-	return foldLinkedList(combine, leaf, linkedList)
-}
-
-console.log(stringOfLinkedListReduce(someLinkedList))
-
-console.log(stringSumOfLinkedListReduce(someLinkedList) + " = " + sumOfLinkedListReduce(someLinkedList))
-</script>
-
-
-
-<script type="text/javascript+notebook-cell" data-autorun="true">
-function mapArray(fn, array) {
-	if(array.length === 0) {
-		return []
-	}
-	return [fn(array[0]), ...mapArray(fn, array.slice(1))]
-}
-
-function mapTree(fn, tree) {
-	if(tree.hasOwnProperty('value')) {
-		return {value: fn(tree.value)}
-	}
-	return {
-		left: mapTree(fn, tree.left),
-		right: mapTree(fn, tree.right),
-	}
-}
-
-function mapLinkedList(fn, list) {
-	if(list.hasOwnProperty('nil')) {
-		return list
-	}
-	return {
-		head: fn(list.head),
-		tail: mapLinkedList(fn, list.tail),
-	}
-}
-
-const times3 = (x) => x*3
-
-console.log(stringOfArrayReduce(someNumberArray))
-console.log(stringOfTreeReduce(someBinaryTree))
-console.log(stringOfLinkedListReduce(someLinkedList))
-
-console.log(stringOfArrayReduce(mapArray(times3, someNumberArray)))
-console.log(stringOfTreeReduce(mapTree(times3, someBinaryTree)))
-console.log(stringOfLinkedListReduce(mapLinkedList(times3, someLinkedList)))
-</script>
-
-
-
-<script type="text/javascript+notebook-cell" data-autorun="true">
-
-
-function mapPatternTree(fn, tree) {
-	if(tree.hasOwnProperty('value')) {
-		return tree
-	}
-	return {
-		left: fn(tree.left),
-		right: fn(tree.right),
-	}
-}
-
-function mapPatternLinkedList(fn, list) {
-	if(list.hasOwnProperty('nil')) {
-		return list
-	}
-	return {
-		head: list.head,
-		tail: fn(list.tail),
-	}
-}
-
-const sumPatternTree = (t) => {
-	if(t.hasOwnProperty('value')) {
-		return t.value
-	} else {
-		return t.left + t.right
-	}
-}
-
-const sumPatternLinkedList = (l) => {
-	if(l.hasOwnProperty('nil')) {
-		return 0
-	} else {
-		return l.head + l.tail
-	}
-}
-
-const rangeLinkedList = (l) => {
-	if(l === 0) {
-		return {nil: true}
-	} else {
-		return {head: l, tail: l-1}
-	}
-}
-
-const cataMorphism = (algebra, mapper) => {
-	const loop = (term) => {
-		return algebra(mapper(loop, term))
-	}
-	return loop
-}
-
-const anaMorphism = (coalgebra, mapper) => {
-	const loop = (seed) => {
-		return mapper(loop, coalgebra(seed))
-	}
-	return loop
-}
-
-const hyloMorphism = (algebra, coalgebra, mapper) => {
-	const loop = (seed) => {
-		return algebra(mapper(loop, coalgebra(seed)))
-	}
-	return loop
-}
-
-
-console.log(cataMorphism(sumPatternLinkedList, mapPatternLinkedList)(someLinkedList))
-console.log(stringOfLinkedListReduce(anaMorphism(rangeLinkedList, mapPatternLinkedList)(10)))
-console.log(hyloMorphism(sumPatternLinkedList, rangeLinkedList, mapPatternLinkedList)(100))
-</script>
-
-<script type="text/javascript+notebook-cell" data-autorun="true">
-const TreeF = Object.create({
-  get isLeaf() {return this.type === 'Leaf'},
-  get isNode() { return this.type === 'Node'},
-  
-  fmap (f) {
-    if (this.isLeaf) {
-      return TreeLeaf();
-    } else if (this.isNode) {
-      return TreeNode(this.value, f(this.left), f(this.right));
-    }
-  }, 
-
-  toString() {
-    return cata(treeConcatAlgebra)(this)
-  }
-})
-
-const TreeLeaf = () => Object.create(TreeF, { type: {value: 'Leaf', writable: false} });
-const TreeNode = (value, left = TreeLeaf(), right = TreeLeaf()) => Object.create(TreeF, { 
-	type: {value: 'Node', writable: false},  
-	value: {value: value, writable: false},  
-	left: {value: left, writable: false}, 
-	right: {value: right, writable: false} 
-});
-
-
-const ListF = Object.create({
-  get isNil() {return this.type === 'Nil'},
-  get isCons() { return this.type === 'Cons'},
-      
-  fmap (f) {
-    if (this.isNil) {
-      return ListNil;
-    } else if (this.isCons) {
-      return ListCons(this.value, f(this.tail));
-    }
-  },
-
-  toString() {
-    return cata(listConcatAlgebra)(this)
-  }
-})
-
-
-const ListNil = Object.create(ListF, { type:  {value: 'Nil', writable: false} });
-const ListCons = (value, tail) => Object.create(ListF, { type: {value: 'Cons', writable: false}, value:  {value, writable: false}, tail:  {value: tail, writable: false} });
-
-
-const cata = (algebra) => {
-  const go = (term) => algebra(term.fmap(go));
-  return go;
-};
-
-const ana = (coalgebra) => {
-  const go = (seed) => coalgebra(seed).fmap(go);
-  return go;
-};
-
-const hylo = (algebra, coalgebra) => {
-  const go = (seed) => algebra(coalgebra(seed).fmap(go));
-  return go;
-};
-
-const para = (algebra) => {
-  const go = (term) => algebra(term.fmap(sub => [go(sub), sub]));
-  return go;
-};
-
-const apo = (coalgebra) => {
-  // Note: apo needs a convention like { isFix: true, value: term } to mark early-exits.
-  const go = (seed) => {
-    const layer = coalgebra(seed);
-    return layer.fmap(e => e instanceof Object && e.isFix ? e.value : go(e));
-  };
-  return (seed) => ({ isFix: true, value: go(seed) }); // mimic Fix without wrapper
-};
-
-const zygo = (f, g) => {
-  const go = (term) => {
-    const pair = term.fmap(go);
-    const b = g(pair.map(([_, b]) => b));
-    const a = f(pair.map(([a, _]) => a), b);
-    return [a, b];
-  };
-  return (term) => go(term)[0];
-};
-
-const chrono = (f, g) => {
-  const go = (seed) => {
-    const layer = g(seed); // coalgebra: g :: a -> F (a, b)
-    const mapped = layer.fmap(([a, b]) => {
-      const [v, memo] = go(a);
-      return [v, b]; // use memo
-    });
-    const value = f(mapped);
-    return [value, null]; // ignore second if needed
-  };
-  return (seed) => go(seed)[0];
-};
-
-const histo = (algebra) => {
-  const go = (term) => {
-    const cache = term.fmap(go);
-    const result = algebra(cache);
-    return { result, cache }; // tie the knot
-  };
-  return (term) => go(term).result;
-};
-
-const futu = (coalgebra) => {
-  const go = (seed) => {
-    const layer = coalgebra(seed);
-    return layer.fmap(go);
-  };
-  return go;
-};
-
-const treeSumAlgebra = (node) => {
-  if (node.isLeaf) {
-    return 0;
-  } else if (node.isNode) {
-    return  node.value + node.left + node.right;
-  }
-};
-
-const treeConcatAlgebra = (node) => {
-  if (node.isLeaf) {
-    return '*';
-  } else if (node.isNode) {
-    return "("+node.left + " < " + node.value.toString()  + " > "  + node.right+")";
-  }
-};
-
-
-const listSumAlgebra = (node) => {
-  if (node.isCons) {
-    return node.value + node.tail
-  } else if (node.isNil) {
-    return 0
-  }
-};
-
-const listConcatAlgebra = (node) => {
-  if (node.isCons) {
-    return node.value + " :: " +  node.tail
-  } else if (node.isNil) {
-    return "NIL"
-  }
-};
-
-
-const treeMaxAlgebra = (init = -Infinity) =>  (node) => {
-  if (node.isLeaf) {
-    return init;
-  } else if (node.isNode) {
-    return Math.max(node.value, node.left, node.right);
-  } 
-};
-
-const listMaxAlgebra = (init = -Infinity) => (node) => {
-  if (node.isCons) {
-    return Math.max(node.value, node.tail)
-  } else if (node.isNil) {
-    return init
-  }
-};
-
-const myListCoAlgebra = (x) => {
-  return x > 0 ? ListCons(x, x-1) : ListNil
-}
-
-const myTreeCoAlgebra =  (x) => {
-  return x > 0 ? TreeNode(x, x-1, x-1) : TreeLeaf()
-}
-
-const listMapAlgebra = (f) => (node) => {
-  if (node.isNil) return ListNil;
-  if (node.isCons) return ListCons(f(node.value), node.tail);
-}
-
-const treeMapAlgebra = (f) => (node) => {
-  if (node.isLeaf) {
-    return TreeLeaf();
-  } else if (node.isNode) {
-    return TreeNode(f(node.value), node.left, node.right)
-  }
-}
-
-const annotateListLength = (node) => {
-  if (node.isNil) {
-    return ListNil;
-  }
-
-  const head = node.value;
-  const [recurResult, originalTail] = node.tail;
-  
-  const len = recurResult.isCons
-    ? recurResult.value[1] + 1
-    : 1;
-
-  return ListCons([head, len], recurResult);
-};
-
-const reverseListAlgebra = (node) =>
-  node.isNil
-    ? (acc) => acc
-    : (acc) => node.tail(ListCons(node.value, acc));
-
-function getArrowFunctionBody(f) {
-	const matches = f.toString().match(/^(?:\s*\(?(?:\s*\w*\s*,?\s*)*\)?\s*?=>\s*){?([\s\S]*)}?$/);
-	if (!matches) {
-	return null;
-	}
-
-	const firstPass = matches[1];
-
-	// Needed because the RegExp doesn't handle the last '}'.
-	const secondPass =
-	(firstPass.match(/{/g) || []).length === (firstPass.match(/}/g) || []).length - 1 ?
-	  firstPass.slice(0, firstPass.lastIndexOf('}')) :
-	  firstPass
-
-	return secondPass;
-}
-	
-const l = ListCons(8, ListCons(3, ListCons(7, ListNil)))
-const t = TreeNode(0, TreeNode(0, TreeNode(3), TreeNode(4)), TreeNode(10, TreeNode(2), TreeNode(1)))
-const examples = [
-	() => (l.toString()),
-	() => (t.toString()),
-	
-	() => (cata(reverseListAlgebra)(l)(ListNil)),
-	 
-	() => (cata(listSumAlgebra)(l)),
-	() => (cata(treeSumAlgebra)(t)),
-	() => (cata(listMaxAlgebra())(l)),
-	() => (cata(treeMaxAlgebra())(t)),
-	
-	() => (ana(myListCoAlgebra)(10).toString()),
-	() => (ana(myTreeCoAlgebra)(3).toString()),
-	
-	() => (hylo(listSumAlgebra, myListCoAlgebra)(10)),
-		
-	() => (hylo(
-		(node) => node.isNil ? 0 : node.value + node.tail, 
-		(x) => x < 1 ? ListNil : ListCons(x, x-1)
-	)(100)),
-	
-	() => (cata(listMapAlgebra(x => x * 2))(l).toString()),
-	() => (cata(treeMapAlgebra(x => x * 1))(t).toString()),
-	() => (cata(treeMapAlgebra(x => x * 2))(t).toString()),
-	
-	() => (para(annotateListLength)(l).toString()),
-	
-	() => (listMapAlgebra(([a,b]) => a*b)(para(annotateListLength)(l)).toString()),
-]
-
-for(let e of examples) {
-	console.log(getArrowFunctionBody(e).trim(), e())
-}
-</script>
+	<figcaption>recursive range</figcaption>
+</figure>
 
 <h2>References</h2>
 
