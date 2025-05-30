@@ -691,8 +691,174 @@ console.log("minimum", binaryTreeWithEmptyNodesReduce((c => {
 </p>
 
 <p>
-	What we pass to the <code>handleCases</code> looks structurally like a node of the the tree but instead it is just a flat container for the the results of the recursive function calls.
+	What we pass to the <code>handleCases</code> looks structurally like a node of the the tree but instead of actually containing the recursive structure of the tree it is just a flat container for the the results of the recursive function calls.
 </p>
+
+
+<figure>
+<script type="text/javascript+notebook-cell" data-autorun="true">
+// an actual node from the recursive tree structure
+const actualInnerTreeNode = {
+	value: 5 /*value stored in this node*/,
+	left: {/*... left child, being itself a tree node recursively */},
+	right: {/*... right child, being itself a tree node recursively */},
+}
+
+// a container object storing the results of recursive function calls
+const recursionResultTreeNode = {
+	/* has the same property keys as the actual corresponding tree node */
+	value: 5 /*copy of the value stored in the original tree node*/,
+	left: 23 /* not a recursive child node, but just the result of the recursive function call on the left child of the original tree node */,
+	right: 42 /* not a recursive child node, but just the result of the recursive function call on the right child of the original tree node */,
+}
+
+// an actual node from the recursive tree structure
+const actualTreeLeftNode = {
+	value: 5 /*value stored in this node*/,
+}
+
+// a container object storing the results of recursive function calls
+// But this is the base case so it does not store any results
+const recursionResultTreeLeftNode = {
+	/* has the same property keys as the actual corresponding tree node */
+	value: 5 /*copy of the value stored in the original tree node*/,
+}
+</script>
+<figcaption><strong>Example:</strong> comparison between actual recursive tree nodes and container objects to hold the recursion results.</figcaption>
+</figure>
+
+<p>
+	So by mirroring the structure of the recursive tree nodes we can capture all the results of our recursive function calls an pass it to to our handler function as a single value. The handler function can then inspect in which case of the structure the recursion is currently working in.
+</p>
+
+<p>
+	But there is more! Look at the each of the <code>handleCases(...)</code> function calls. For example this one:
+</p>
+
+<figure>
+<script type="text/javascript+notebook-cell" data-autorun="true">
+function binaryTreeWithEmptyNodesReduce(handleCases, tree) {
+	if(tree.hasOwnProperty('nil')) { // <-- inspect type of current node
+		return handleCases( // <-- call handleCases
+			{nil: true} // <-- with flat copy of the node structure
+		)
+	} else if( // <-- inspect type of current node
+		tree.hasOwnProperty('left') && tree.hasOwnProperty('right')
+	) {
+		return handleCases(// <-- call handleCases
+		{
+			value: tree.value, // <-- with flat copy of the node structure
+			left: // <-- but with the recursive parts replaced by the recursion result
+				binaryTreeWithEmptyNodesReduce(handleCases, tree.left),
+			right: // <-- but with the recursive parts replaced by the recursion result
+				binaryTreeWithEmptyNodesReduce(handleCases, tree.right)
+		}
+		)
+	} else { // <-- inspect type of current node
+		return handleCases(// <-- call handleCases
+			{value: tree.value}// <-- with flat copy of the node structure
+		)
+	}
+}
+</script>
+<figcaption><strong>Example:</strong> revisit the <code>handleCases()</code> function call</figcaption>
+</figure>
+
+<p>Wow! All the cases in <code>binaryTreeWithEmptyNodesReduce</code> (and the other <code>...Reduce</code> functions respectively) are following exactly the same structure. The just copy the node, replacing the recursive fields and apply the <code>handleCases</code> function to the now flat copy of the node.</p>
+
+<p>
+	Could we extract the <em>make a flat copy of the node and replace the recursive parts</em> into a separate function? Yes we can! Take a look:
+</p>
+
+
+<figure>
+<script type="text/javascript+notebook-cell" data-autorun="true">
+function binaryTreeRecursionReplacer(replacer, tree) {
+	if(tree.hasOwnProperty('nil')) { 
+		return {nil: true}
+	} else if( 
+		tree.hasOwnProperty('left') && tree.hasOwnProperty('right')
+	) {
+		return {
+			value: tree.value,
+			left: replacer(tree.left),
+			right: replacer(tree.right)
+		}
+	} else {
+		return {value: tree.value}
+	}
+}
+
+function binaryTreeReduce(handleCases, tree) {
+	return handleCases(
+		binaryTreeRecursionReplacer(
+			(child) => binaryTreeReduce(handleCases, child), tree)
+		)
+}
+</script>
+<figcaption><strong>Example:</strong> splitting <code>binaryTreeWithEmptyNodesReduce</code> into two functions: the recursion and the node copying</figcaption>
+</figure>
+
+<p>
+	Now look at that! The <code>binaryTreeRecursionReplacer</code> looks almost like our <code>map</code> function from the beginning, but instead of applying the provided function (<code>replacer</code>) to the value stored in a node, the function is applied to the recursive fields (<code>left</code> and <code>right</code>). So we can think of it as an alternative way of mapping over the tree node.
+</p>
+
+<p>
+	Also look at the <code>binaryTreeReduce</code> function now. It is really short now! The handling of all the cases has been moved into the <code>binaryTreeRecursionReplacer</code> function. What is left in <code>binaryTreeReduce</code> is the pure recursion. <strong>This is our recursion scheme!</strong>
+</p>
+
+<p>Lets put everything back together:</p>
+
+
+
+<figure>
+<script type="text/javascript+notebook-cell" data-autorun="true">
+function binaryTreeMapRecursiveFields(replacer, tree) {
+	if(tree.hasOwnProperty('nil')) { 
+		return {nil: true}
+	} else if( 
+		tree.hasOwnProperty('left') && tree.hasOwnProperty('right')
+	) {
+		return {
+			value: tree.value,
+			left: replacer(tree.left),
+			right: replacer(tree.right)
+		}
+	} else {
+		return {value: tree.value}
+	}
+}
+
+const minimum = c => {
+	if(c.nil) {
+		return Infinity
+	} else if(c.left && c.right) {
+		return Math.min(c.value, c.left, c.right)
+	} else {
+		return c.value
+	}
+}
+
+function recursiveReduce(recursiveMapper, handleCase, data) {
+	return handleCase(recursiveMapper(
+		(child) => recursiveReduce(recursiveMapper, handleCase, child), data))
+}
+
+function cataMorphism(recursiveMapper, handleCase) {
+	const curried = (data) => handleCase(recursiveMapper(curried, data))
+
+	return curried
+}
+
+
+console.log("minimum", recursiveReduce(binaryTreeMapRecursiveFields, minimum, simpleBinaryTreeWithInnerValues))
+
+const treeMinimum = cataMorphism(binaryTreeMapRecursiveFields, minimum)
+
+console.log("minimum", treeMinimum(simpleBinaryTreeWithInnerValues))
+</script>
+<figcaption><strong>Example:</strong> splitting <code>binaryTreeWithEmptyNodesReduce</code> into two functions: the recursion and the node copying</figcaption>
+</figure>
 
 <h2>References</h2>
 
