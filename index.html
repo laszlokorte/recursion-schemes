@@ -1,872 +1,1411 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="icon" href="favicon.svg">
-<title>Recursion Schemes</title>
-<link rel="stylesheet" href="assets/blog-cells.css" />
-<script src="assets/babel.min.js"></script>
-<script src="assets/blog-cells.js"></script>
-<style>
-main {
-	max-width: 40em;
-	margin: 0 auto 5em;
-}
-
-a {
-	color: #1e70af;
-}
-
-figure {
-	margin: 1em 0;
-	background: #eee;
-}
-
-figcaption {
-	margin: 0;
-	padding: 1em;
-
-}
-
-figure .cell-editor {
-	margin: 0;
-}
-</style>
-</head>
-<body>
-<main>
-<h1><img src="favicon.svg" alt="" style="height: 1em; vertical-align: text-bottom;"> Recursion Schemes</h1>
-
-<p>
-	This is a simple and practical introduction to <a href="https://github.com/passy/awesome-recursion-schemes">recursion schemes</a> in functional programming.
-</p>
-
-<p>
-	Recursion schemes are higher order functions (<abbr title="higher order functions">HOF</abbr>) that can be used as building blocks for composing recursive algorithms. Recursion schemes separates the recursive part of a recursive algorithm from the actual calculation the same way the functions like <code>Array.map</code> separate the the <em>iteration</em> part from the calculation that should be done on each element.
-</p>
-
-<p>
-	This article will be guiding you through a thought process to understanding recursion schemes by inventing them yourself.
-</p>
-
-<h2>Recap: Higher Order Functions &mdash; <code>for</code> vs <code>map</code></h2>
-
-<p>
-	Before we start lets revisit a well known higher order function: <code>map</code>.
-	Originally rooted in function programming, nowadays it is commonly used in imperative and object oriented programming languages. It allows to express an element-wise operation over some container object. 
-</p>
-
-<p>
-	Take a look at the following two examples. The first one iterates over an array to multiply each element by two, collecting the results in a new array.
-</p>
-
-<figure>
-<script type="text/javascript+notebook-cell" data-autorun="true">
-
-function doubleEachElementIteratively(array) {
-	let result = []
-
-	for (var i = 0; i < array.length; i++) {
-		result.push(array[i] * 2)
-	}
-
-	return result
-}
-
-console.log(doubleEachElementIteratively([1,2,3]))
-
-
-</script>
-	<figcaption><strong>Example:</strong> doubling each element of an array via explicit iteration</figcaption>
-</figure>
-
-<p>
-	The next one achieves the same goal but separates the process of iteration and the element-wise calculation into two separte functions. The function doing the interation and collecting the resulting values is called	<code>arrayMap</code>, or typically just <code>map</code>.
-</p>
-
-<figure>
-
-<script type="text/javascript+notebook-cell" data-autorun="true">
-
-export function arrayMap(fn, array) {
-	let result = []
-
-	for (var i = 0; i < array.length; i++) {
-		result.push(fn(array[i]))
-	}
-
-	return result
-}
-
-function doubleEachElementMapped(array) {
-	return arrayMap((el) => el  * 2, array)
-}
-
-console.log(doubleEachElementMapped([1,2,3]))
-</script>
-<figcaption><strong>Example:</strong> doubling each element of an array via the higher order <code>map</code> function</figcaption>
-</figure>
-
-<p>
-	There are many advantages of separating the iteration from the elementwise calculation. The most obvious one is that the iteration has only to be defined once and can be reused:
-</p>
-
-<figure>
-<script type="text/javascript+notebook-cell" data-autorun="true">
-console.log("Tripling:", arrayMap((el) => el  * 3, [1,2,3]))
-console.log("Incrementing:", arrayMap((el) => el + 1, [1,2,3]))
-console.log("Checking oddness:", arrayMap((el) => el % 2 == 1, [1,2,3]))
-</script>
-<figcaption><strong>Example:</strong> Various elementwise transformations of an array</figcaption>
-</figure>
-
-<p>
-	Further advantages are: Intentions and invariants are expressed more clearly and the ease of later refactorings. Applying the <code>map</code> function will not change the number of elements in the array and will not change the order of the elements. Abstracting away the specific iteration stragegy allowes for later changes and optimizations. For example the internal iteration order could be reversed or eben even parallelized without effecting the observable result:
-</p>
-
-
-<figure>
-<script type="text/javascript+notebook-cell" data-autorun="true">
-
-export function arrayMap(fn, array) {
-	let result = []
-
-	// iterating from back to front
-	for (var i = array.length-1; i >= 0; i--) {
-		result.unshift(fn(array[i]))
-	}
-
-	return result
-}
-
-console.log("Tripling:", arrayMap((el) => el  * 3, [1,2,3]))
-console.log("Incrementing:", arrayMap((el) => el + 1, [1,2,3]))
-console.log("Checking oddness:", arrayMap((el) => el % 2 == 1, [1,2,3]))
-</script>
-<figcaption><strong>Example:</strong> doubling each element of an array via the higher order <code>map</code> function</figcaption>
-</figure>
-
-<p>
-	The third advantage is that the same concept of applying an element-wise transformation can be implemented for other containers of elements. For example for a binary tree as the one below:
-</p>
-
-<figure>
-<script type="text/javascript+notebook-cell" data-autorun="true">
-export const simpleBinaryTree = {
-	left: {left: {value: 2} , right: {value: 3}},
-	right: {left: {value: 5} , right: {left: {value: 2} , right: {value: 3}}}
-}
-</script>
-<figcaption><strong>Example:</strong> a simple binary tree structure, containing values in its leef</figcaption>
-</figure>
-
-<p>
-	A corresponding map function could be implemented as follows:
-</p>
-
-
-<figure>
-<script type="text/javascript+notebook-cell" data-autorun="true">
-export function mapTree(fn, tree) {
-	if(tree.value) {
-		return {value: fn(tree.value)}
-	} else {
-		return {
-			left: mapTree(fn, tree.left),
-			right: mapTree(fn, tree.right)
-		}
-	}
-}
-</script>
-<figcaption><strong>Example:</strong> a simple implementation of <code>mapTree</code></figcaption>
-</figure>
-
-<p>
-	Then we coule use the <code>mapTree</code> function, the same way as we did with the <code>mapArray</code> function before, to transform each element in the tree:
-</p>
-
-
-
-<figure>
-<script type="text/javascript+notebook-cell" data-autorun="true">
-console.log("original tree", simpleBinaryTree)
-console.log("doubling", mapTree(el => el * 2, simpleBinaryTree))
-console.log("check oddness", mapTree(el => el % 2 == 1, simpleBinaryTree))
-</script>
-<figcaption><strong>Example:</strong> a simple implementation of <code>mapTree</code></figcaption>
-</figure>
-
-<p>
-	So we have seen that abstracting the process of stepping through a data structure by separating the <em>stepping</em> from the <em>work to do at each step</em> is a powerful tool. 
-</p>
-
-<h2>Recursive data structures</h2>
-
-<p>
-	With the binary tree in the example above we have seen that the corresponding <code>map</code> function allowed us to work with a recursive data structure without re-implementing the recursive part our self each time. 
-</p>
-
-<p>
-	But by the nature of the <code>map</code> function we were limited to modifying each value of the tree separately, having not access to the tree itself. What if we want to do actual tree-related calculations but still abstract away the recursive walking?
-</p>
-
-<p>
-	Lets take a look at a few typical cases. Say we want to determine the <strong>height of the tree</strong>, <strong>count the leafs</strong> of the tree, <strong>count the total number of nodes</strong>, <strong>find the minimum</strong> value inside the tree and <strong>find the maximum</strong> value inside the tree. We also want to serialize our tree into a string, for better readability
-</p>
-
-<p>
-	Lets first implement one function for each of our goals by hand. Afterwards we will try to find similaries in the recursion structure and come up with a general reusable solution.
-</p>
-
-
-<figure>
-<script type="text/javascript+notebook-cell" data-autorun="true">
-function binaryTreeHeight(tree) {
-	if(tree.hasOwnProperty('value')) {
-		return 1
-	} else {
-		return Math.max(binaryTreeHeight(tree.left), binaryTreeHeight(tree.right))
-	}
-}
-
-console.log(binaryTreeHeight(simpleBinaryTree))
-</script>
-<figcaption><strong>Example:</strong> tree height</figcaption>
-</figure>
-
-<figure>
-<script type="text/javascript+notebook-cell" data-autorun="true">
-function binaryTreeLeafCount(tree) {
-	if(tree.hasOwnProperty('value')) {
-		return 1
-	} else {
-		return binaryTreeLeafCount(tree.left) + 
-			binaryTreeLeafCount(tree.right)
-	}
-}
-
-console.log(binaryTreeLeafCount(simpleBinaryTree))
-</script>
-<figcaption><strong>Example:</strong> tree leaf count</figcaption>
-</figure>
-
-<figure>
-<script type="text/javascript+notebook-cell" data-autorun="true">
-function binaryTreeNodeCount(tree) {
-	if(tree.hasOwnProperty('value')) {
-		return 1
-	} else {
-		return 1 + binaryTreeNodeCount(tree.left) + 
-			binaryTreeNodeCount(tree.right)
-	}
-}
-
-console.log(binaryTreeNodeCount(simpleBinaryTree))
-</script>
-<figcaption><strong>Example:</strong> tree leaf count</figcaption>
-</figure>
-
-<figure>
-<script type="text/javascript+notebook-cell" data-autorun="true">
-function binaryTreeMinimumValue(tree) {
-	if(tree.hasOwnProperty('value')) {
-		return tree.value
-	} else {
-		return Math.min(
-			binaryTreeMinimumValue(tree.left), 
-			binaryTreeMinimumValue(tree.right)
-		)
-	}
-}
-
-console.log(binaryTreeMinimumValue(simpleBinaryTree))
-</script>
-<figcaption><strong>Example:</strong> tree minimum value</figcaption>
-</figure>
-
-<figure>
-<script type="text/javascript+notebook-cell" data-autorun="true">
-function binaryTreeMaximumValue(tree) {
-	if(tree.hasOwnProperty('value')) {
-		return tree.value
-	} else {
-		return Math.max(
-			binaryTreeMaximumValue(tree.left), 
-			binaryTreeMaximumValue(tree.right)
-		)
-	}
-}
-
-console.log(binaryTreeMaximumValue(simpleBinaryTree))
-</script>
-<figcaption><strong>Example:</strong> tree maxiumum value</figcaption>
-</figure>
-
-<figure>
-<script type="text/javascript+notebook-cell" data-autorun="true">
-function binaryTreeToString(tree) {
-	if(tree.hasOwnProperty('value')) {
-		return "["+tree.value+"]"
-	} else {
-		return "("+(
-			binaryTreeToString(tree.left) +":"+ 
-			binaryTreeToString(tree.right)
-		)+")"
-	}
-}
-
-console.log(binaryTreeToString(simpleBinaryTree))
-</script>
-<figcaption><strong>Example:</strong> tree to string</figcaption>
-</figure>
-
-
-<p>
-	All the implementations above look very similar. All of them check if the current node we are looking at is a leaf (i.e. has a <code>value</code> property). If so, a base case result is returned, either a constant or a something based on the value stored in the leaf. If on the other hand the current node is an inner node, two recursive function calls are invoked (one for the left and one for the right branch of the tree) and then their result is combined in a speicific way.
-</p>
-
-<p>
-	<strong>This pattern of similarity between these function is one of the recursion schemes we are after.</strong> Lets try to extract this pattern of recursive function calls into a common pattern. We take one of the function definitions above and try to move all the specific calculations into functions parameters to be passed in later:
-</p>
-
-
-<figure>
-<script type="text/javascript+notebook-cell" data-autorun="true">
-export function binaryTreeReduce(handleLeaf, handleBranch, tree) {
-	if(tree.hasOwnProperty('value')) {
-		return handleLeaf(tree.value)
-	} else {
-		return handleBranch(
-			binaryTreeReduce(handleLeaf, handleBranch, tree.left), 
-			binaryTreeReduce(handleLeaf, handleBranch, tree.right)
-		)
-	}
-}
-</script>
-<figcaption><strong>Example:</strong> generic binary tree reduction</figcaption>
-</figure>
-
-<p>
-	Instead of hardcoding how the recursive results for the two branches shall be combined and what to do with the leaf nodes, we accept to callback functions: <code>handleLeaf</code> is called with the value stored in each leaf (similar to <code>fn</code> in our <code>treeMap</code> function before) and <code>handleBranch</code> is called with the two results from both of the recursive calls.
-</p>
-
-<p>
-	Now be can express all of our tree-based calculations from above in terms of our new <code>binaryTreeReduce</code> function:
-</p>
-
-
-<figure>
-<script type="text/javascript+notebook-cell" data-autorun="true">
-console.log("Height", binaryTreeReduce(
-	(v) => 1, (l, r) => Math.max(l, r), 
-	simpleBinaryTree
-))
-console.log("LeafCount", binaryTreeReduce(
-	(v) => 1, (l, r) => (l + r), 
-	simpleBinaryTree
-))
-console.log("NodeCount", binaryTreeReduce(
-	(v) => 1, (l, r) => (1 + l + r), 
-	simpleBinaryTree
-))
-console.log("MinimumValue", binaryTreeReduce((v) => v, (l, r) => Math.min(l,r), simpleBinaryTree))
-console.log("MaximumValue", binaryTreeReduce((v) => v, (l, r) => Math.max(l,r), simpleBinaryTree))
-console.log("ToString", binaryTreeReduce((v) => "["+v+"]", (l, r) => "("+l+":"+r+")", simpleBinaryTree))
-</script>
-<figcaption><strong>Example:</strong> application of <code>binaryTreeReduce</code></figcaption>
-</figure>
-
-<p>
-	That worked great! We have successfully abstracted the recursion into a single <code>binaryTreeReduce</code> function. Are we done? Have we mastered the recursion scheme? Almost, but we are not quite done that. 
-</p>
-
-<h2>Other recursive data structures</h2>
-
-<p>
-	The <code>binaryTreeReduce</code> function does work for our binary tree but what if we have other recursive data structures we want to work with? For example linked lists, trees with other than exactly two branches or trees with values stored on the inner nodes as well?
-</p>
-
-<p>
-	It would be nice if we could come up with a <em>single</em> <code>recursiveReduce</code> function that works the same for all of these structures, the same way that the interface of a <code>map(fn, collection)</code> functions works for both lists, arrays, trees and other collections (more preciseley <a href="" title="Functors"> functors</a>)
-</p>
-
-<p>
-	Lets write down some of the recursive data structures we want to work with and start from there: 
-</p>
-
-<figure>
-<script type="text/javascript+notebook-cell" data-autorun="true">
-export const simpleBinaryTreeWithInnerValues = {
-	value: 6,
-	left: {value: 8, left: {value: 2} , right: {value: 3}},
-	right: {value: 9, left: {value: 5} , right: {value: 10, left: {value: 2} , right: {value: 3}}}
-}
-</script>
-<figcaption><strong>Example:</strong> binary tree with value on inner nodes</figcaption>
-</figure>
-
-
-<figure>
-<script type="text/javascript+notebook-cell" data-autorun="true">
-export const simpleLinkedList = {
-	head: 6,
-	tail: {
-		head: 8, 
-		tail: {
-			head: 3, 
-			tail: {
-				head: 5, 
-				tail: {nil: true}
-			}
-		}
-	}
-}
-</script>
-<figcaption><strong>Example:</strong> binary tree with value on inner nodes</figcaption>
-</figure>
-
-<figure>
-<script type="text/javascript+notebook-cell" data-autorun="true">
-export const simpleBinaryTreeWithEmptyNodes = {
-	value: 6,
-	left: {
-		value: 8, 
-		left: {nil: true} , 
-		right: {value: 3}
-	},
-	right: {
-		value: 9, 
-		left: {nil: true}, 
-		right: {
-			value: 10, 
-			left: {nil: true}, 
-			right: {value: 3}
-		}
-	}
-}
-</script>
-<figcaption><strong>Example:</strong> binary tree with empty nodes</figcaption>
-</figure>
-
-<p>
-	Next lets try to implement the function to find the minimum element of each of these three structures. Afterwards we try to see a common pattern in each of the three implementations: 
-</p>
-
-
-<figure>
-<script type="text/javascript+notebook-cell" data-autorun="true">
-export function binaryTreeInnerValuesMinimum(tree) {
-	if(tree.hasOwnProperty('value')) {
-		return tree.value
-	} else {
-		return Math.min(
-			tree.value,
-			binaryTreeInnerValuesMinimum(tree.left), 
-			binaryTreeInnerValuesMinimum(tree.right)
-		)
-	}
-}
-
-
-console.log("minimum", binaryTreeInnerValuesMinimum(simpleBinaryTreeWithInnerValues))
-</script>
-<figcaption><strong>Example:</strong> finding the minimum of a binary tree with inner values</figcaption>
-</figure>
-
-<figure>
-<script type="text/javascript+notebook-cell" data-autorun="true">
-export function linkedListMinimum(fallback, list) {
-	if(list.hasOwnProperty('nil')) {
-		return fallback
-	} else {
-		return Math.min(
-			list.head, 
-			linkedListMinimum(fallback, list.tail)
-		)
-	}
-}
-console.log("minimum", linkedListMinimum(Infinity, simpleLinkedList))
-
-</script>
-<figcaption><strong>Example:</strong> finding the minimum of a linked list</figcaption>
-</figure>
-
-
-<figure>
-<script type="text/javascript+notebook-cell" data-autorun="true">
-export function binaryTreeWithEmptyNodesMinimum(fallback, tree) {
-	if(tree.hasOwnProperty('nil')) {
-		return fallback
-	} else if(tree.hasOwnProperty('left') && tree.hasOwnProperty('right')) {
-		return Math.min(
-			tree.value,
-			binaryTreeWithEmptyNodesMinimum(fallback, tree.left),
-			binaryTreeWithEmptyNodesMinimum(fallback, tree.right)
-		)
-	} else {
-		return tree.value
-	}
-}
-
-console.log("minimum", binaryTreeWithEmptyNodesMinimum(Infinity, simpleBinaryTreeWithEmptyNodes))
-
-</script>
-<figcaption><strong>Example:</strong> finding the minimum of a binary tree with maybe empty nodes</figcaption>
-</figure>
-
-<p>
-	We can observe that each function differs in the number of branches, depending on the structure of the recursive data structure. For the linked list we need only two branches, one for the nil case at the end of the list and one for the case of list having a head. For the binary tree with either an inner node with left/right children or an empty node or a leaf node with a single value, the recursive function needs to handle each of the three conditions. 
-</p>
-
-<p>
-	Also the number of arguments of the functions vary. For the tree that contains at least one leaf node with a value we do not need a fallback value. But for the other two structures we need a fallback value to return in case the structure itself does not contain any value.
-</p>
-
-<p>
-	How could we possibly unify all three of these functions into a common interface? Lets take it slowly and first implement a generic function for each of the structures individually again, as we did with <code>binaryTreeReduce</code> for the simple binary tree above:
-</p>
-
-
-<figure>
-<script type="text/javascript+notebook-cell" data-autorun="true">
-export function binaryTreeInnerValuesReduce(handleLeaf, handleInner, tree) {
-	if(tree.hasOwnProperty('value')) {
-		return handleLeaf(tree.value)
-	} else {
-		return handleInner(
-			tree.value,
-			binaryTreeInnerValuesMinimum(handleLeaf, handleInner, tree.left), 
-			binaryTreeInnerValuesMinimum(handleLeaf, handleInner, tree.right)
-		)
-	}
-}
-
-
-console.log("minimum", binaryTreeInnerValuesReduce((v) => v, (v,l,r) => Math.min(v, l, r), simpleBinaryTreeWithInnerValues))
-</script>
-<figcaption><strong>Example:</strong> generic reduction of a binary tree with inner values</figcaption>
-</figure>
-
-<figure>
-<script type="text/javascript+notebook-cell" data-autorun="true">
-export function linkedListReduce(handleLeaf, handleInner, list) {
-	if(list.hasOwnProperty('nil')) {
-		return handleLeaf()
-	} else {
-		return handleInner(
-			list.head, 
-			linkedListReduce(handleLeaf, handleInner, list.tail)
-		)
-	}
-}
-console.log("minimum", linkedListReduce(() => Infinity, (l,r) => Math.min(l,r), simpleLinkedList))
-
-</script>
-<figcaption><strong>Example:</strong> generic reduction of a linked list</figcaption>
-</figure>
-
-
-<figure>
-<script type="text/javascript+notebook-cell" data-autorun="true">
-export function binaryTreeWithEmptyNodesReduce(handleEmpty, handleLeaf, handleInner, tree) {
-	if(tree.hasOwnProperty('nil')) {
-		return handleEmpty()
-	} else if(tree.hasOwnProperty('left') && tree.hasOwnProperty('right')) {
-		return handleInner(
-			tree.value,
-			binaryTreeWithEmptyNodesReduce(handleEmpty, handleLeaf, handleInner, tree.left),
-			binaryTreeWithEmptyNodesReduce(handleEmpty, handleLeaf, handleInner, tree.right)
-		)
-	} else {
-		return handleLeaf(tree.value)
-	}
-}
-
-console.log("minimum", binaryTreeWithEmptyNodesReduce(() => Infinity, v=>v, (v,l,r) => Math.min(v, l, r), simpleBinaryTreeWithEmptyNodes))
-</script>
-<figcaption><strong>Example:</strong> generic reduction of a binary tree with maybe empty nodes</figcaption>
-</figure>
-
-<p>
-	Now we can see even more cleary that the number of needed <code>handle</code>-callbacks vary for each reduction and the even the number of argument each <code>handle</code>-callback takes, varies.
-</p>
-
-<p>
-	But what if we could merge all the callbacks into a single function and leave it for this function to handle each possible case correctly? Lets try:
-</p>
-
-
-<figure>
-<script type="text/javascript+notebook-cell" data-autorun="true">
-export function binaryTreeInnerValuesReduce(handleCases, tree) {
-	if(tree.hasOwnProperty('value')) {
-		return handleCases({value: tree.value})
-	} else {
-		return handleCases({
-			value: tree.value,
-			left: binaryTreeInnerValuesMinimum(handleCases, tree.left), 
-			right: binaryTreeInnerValuesMinimum(handleCases, tree.right)
-		})
-	}
-}
-
-
-console.log("minimum", binaryTreeInnerValuesReduce((c) => {
-	if(c.left && c.right) {
-		return Math.min(c.value, c.left, c.right)
-	} else {
-		return c.value
-	}
-}, simpleBinaryTreeWithInnerValues))
-</script>
-<figcaption><strong>Example:</strong> generic reduction of a binary tree with inner values</figcaption>
-</figure>
-
-<figure>
-<script type="text/javascript+notebook-cell" data-autorun="true">
-export function linkedListReduce(handleCases, list) {
-	if(list.hasOwnProperty('nil')) {
-		return handleCases({nil: true})
-	} else {
-		return handleCases({
-			head: list.head, 
-			tail: linkedListReduce(handleCases, list.tail)
-		})
-	}
-}
-console.log("minimum", linkedListReduce((c) => {
-	if (c.nil) {
-		return Infinity
-	} else {
-		return Math.min(c.head, c.tail)
-	}
-}, simpleLinkedList))
-
-</script>
-<figcaption><strong>Example:</strong> generic reduction of a linked list</figcaption>
-</figure>
-
-
-<figure>
-<script type="text/javascript+notebook-cell" data-autorun="true">
-export function binaryTreeWithEmptyNodesReduce(handleCases, tree) {
-	if(tree.hasOwnProperty('nil')) {
-		return handleCases({nil: true})
-	} else if(tree.hasOwnProperty('left') && tree.hasOwnProperty('right')) {
-		return handleCases({
-			value: tree.value,
-			left: binaryTreeWithEmptyNodesReduce(handleCases, tree.left),
-			right: binaryTreeWithEmptyNodesReduce(handleCases, tree.right)
-		})
-	} else {
-		return handleCases({value: tree.value})
-	}
-}
-
-console.log("minimum", binaryTreeWithEmptyNodesReduce((c => {
-	if(c.empty) {
-		return Infinity
-	} else if(c.left && c.right) {
-		return Math.min(c.value, c.left,c.right)
-	} else {
-		return c.value
-	}
-}), simpleBinaryTreeWithEmptyNodes))
-</script>
-<figcaption><strong>Example:</strong> generic reduction of a binary tree with maybe empty nodes</figcaption>
-</figure>
-
-<p>
-	Did you notice what we did here? We merged all the callback functions into a single <code>handleCases</code> callback that takes only a single value as argument. What what exactly is this argument that we pass to <code>handleCases</code>? 
-	It is either an object containing the results of the recusive function calls, or the value store in the leafs of the data structure, in case we hit a base case.
-</p>
-
-<p>
-	But look again: the value we pass to <code>handleCases</code> reflects the structure of the node we are currently processing. For example when processing an inner node of a binary tree with inner values, we call <code>handleCases({
-			value,
-			left,
-			right,
-		})</code> with <code>value</code> containing the value in the current node, but <code>left</code> and <code>right</code> <strong>not</strong> containing the sub trees of the original tree, but instead the already calculated results of the two recursive calls.
-</p>
-
-<p>
-	What we pass to the <code>handleCases</code> looks structurally like a node of the the tree but instead of actually containing the recursive structure of the tree it is just a flat container for the the results of the recursive function calls.
-</p>
-
-
-<figure>
-<script type="text/javascript+notebook-cell" data-autorun="true">
-// an actual node from the recursive tree structure
-const actualInnerTreeNode = {
-	value: 5 /*value stored in this node*/,
-	left: {/*... left child, being itself a tree node recursively */},
-	right: {/*... right child, being itself a tree node recursively */},
-}
-
-// a container object storing the results of recursive function calls
-const recursionResultTreeNode = {
-	/* has the same property keys as the actual corresponding tree node */
-	value: 5 /*copy of the value stored in the original tree node*/,
-	left: 23 /* not a recursive child node, but just the result of the recursive function call on the left child of the original tree node */,
-	right: 42 /* not a recursive child node, but just the result of the recursive function call on the right child of the original tree node */,
-}
-
-// an actual node from the recursive tree structure
-const actualTreeLeftNode = {
-	value: 5 /*value stored in this node*/,
-}
-
-// a container object storing the results of recursive function calls
-// But this is the base case so it does not store any results
-const recursionResultTreeLeftNode = {
-	/* has the same property keys as the actual corresponding tree node */
-	value: 5 /*copy of the value stored in the original tree node*/,
-}
-</script>
-<figcaption><strong>Example:</strong> comparison between actual recursive tree nodes and container objects to hold the recursion results.</figcaption>
-</figure>
-
-<p>
-	So by mirroring the structure of the recursive tree nodes we can capture all the results of our recursive function calls an pass it to to our handler function as a single value. The handler function can then inspect in which case of the structure the recursion is currently working in.
-</p>
-
-<p>
-	But there is more! Look at the each of the <code>handleCases(...)</code> function calls. For example this one:
-</p>
-
-<figure>
-<script type="text/javascript+notebook-cell" data-autorun="true">
-function binaryTreeWithEmptyNodesReduce(handleCases, tree) {
-	if(tree.hasOwnProperty('nil')) { // <-- inspect type of current node
-		return handleCases( // <-- call handleCases
-			{nil: true} // <-- with flat copy of the node structure
-		)
-	} else if( // <-- inspect type of current node
-		tree.hasOwnProperty('left') && tree.hasOwnProperty('right')
-	) {
-		return handleCases(// <-- call handleCases
-		{
-			value: tree.value, // <-- with flat copy of the node structure
-			left: // <-- but with the recursive parts replaced by the recursion result
-				binaryTreeWithEmptyNodesReduce(handleCases, tree.left),
-			right: // <-- but with the recursive parts replaced by the recursion result
-				binaryTreeWithEmptyNodesReduce(handleCases, tree.right)
-		}
-		)
-	} else { // <-- inspect type of current node
-		return handleCases(// <-- call handleCases
-			{value: tree.value}// <-- with flat copy of the node structure
-		)
-	}
-}
-</script>
-<figcaption><strong>Example:</strong> revisit the <code>handleCases()</code> function call</figcaption>
-</figure>
-
-<p>Wow! All the cases in <code>binaryTreeWithEmptyNodesReduce</code> (and the other <code>...Reduce</code> functions respectively) are following exactly the same structure. The just copy the node, replacing the recursive fields and apply the <code>handleCases</code> function to the now flat copy of the node.</p>
-
-<p>
-	Could we extract the <em>make a flat copy of the node and replace the recursive parts</em> into a separate function? Yes we can! Take a look:
-</p>
-
-
-<figure>
-<script type="text/javascript+notebook-cell" data-autorun="true">
-function binaryTreeRecursionReplacer(replacer, tree) {
-	if(tree.hasOwnProperty('nil')) { 
-		return {nil: true}
-	} else if( 
-		tree.hasOwnProperty('left') && tree.hasOwnProperty('right')
-	) {
-		return {
-			value: tree.value,
-			left: replacer(tree.left),
-			right: replacer(tree.right)
-		}
-	} else {
-		return {value: tree.value}
-	}
-}
-
-function binaryTreeReduce(handleCases, tree) {
-	return handleCases(
-		binaryTreeRecursionReplacer(
-			(child) => binaryTreeReduce(handleCases, child), tree)
-		)
-}
-</script>
-<figcaption><strong>Example:</strong> splitting <code>binaryTreeWithEmptyNodesReduce</code> into two functions: the recursion and the node copying</figcaption>
-</figure>
-
-<p>
-	Now look at that! The <code>binaryTreeRecursionReplacer</code> looks almost like our <code>map</code> function from the beginning, but instead of applying the provided function (<code>replacer</code>) to the value stored in a node, the function is applied to the recursive fields (<code>left</code> and <code>right</code>). So we can think of it as an alternative way of mapping over the tree node.
-</p>
-
-<p>
-	Also look at the <code>binaryTreeReduce</code> function now. It is really short now! The handling of all the cases has been moved into the <code>binaryTreeRecursionReplacer</code> function. What is left in <code>binaryTreeReduce</code> is the pure recursion. <strong>This is our recursion scheme!</strong>
-</p>
-
-<p>Lets put everything back together:</p>
-
-
-
-<figure>
-<script type="text/javascript+notebook-cell" data-autorun="true">
-function binaryTreeMapRecursiveFields(replacer, tree) {
-	if(tree.hasOwnProperty('nil')) { 
-		return {nil: true}
-	} else if( 
-		tree.hasOwnProperty('left') && tree.hasOwnProperty('right')
-	) {
-		return {
-			value: tree.value,
-			left: replacer(tree.left),
-			right: replacer(tree.right)
-		}
-	} else {
-		return {value: tree.value}
-	}
-}
-
-const minimum = c => {
-	if(c.nil) {
-		return Infinity
-	} else if(c.left && c.right) {
-		return Math.min(c.value, c.left, c.right)
-	} else {
-		return c.value
-	}
-}
-
-function recursiveReduce(recursiveMapper, handleCase, data) {
-	return handleCase(recursiveMapper(
-		(child) => recursiveReduce(recursiveMapper, handleCase, child), data))
-}
-
-function cataMorphism(recursiveMapper, handleCase) {
-	const curried = (data) => handleCase(recursiveMapper(curried, data))
-
-	return curried
-}
-
-
-console.log("minimum", recursiveReduce(binaryTreeMapRecursiveFields, minimum, simpleBinaryTreeWithInnerValues))
-
-const treeMinimum = cataMorphism(binaryTreeMapRecursiveFields, minimum)
-
-console.log("minimum", treeMinimum(simpleBinaryTreeWithInnerValues))
-</script>
-<figcaption><strong>Example:</strong> splitting <code>binaryTreeWithEmptyNodesReduce</code> into two functions: the recursion and the node copying</figcaption>
-</figure>
-
-<h2>References</h2>
-
-
-<p>
-	TBD
-</p>
-
-</main>
-</body>
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <link rel="icon" href="favicon.svg" />
+        <title>Recursion Schemes</title>
+        <link rel="stylesheet" href="assets/blog-cells.css" />
+        <script src="assets/babel.min.js"></script>
+        <script src="assets/blog-cells.js"></script>
+        <style>
+            main {
+                max-width: 40em;
+                margin: 0 auto 5em;
+            }
+
+            a {
+                color: #1e70af;
+            }
+
+            figure {
+                margin: 1em 0;
+                background: #eee;
+            }
+
+            figcaption {
+                margin: 0;
+                padding: 1em;
+            }
+
+            figure .cell-editor {
+                margin: 0;
+            }
+        </style>
+    </head>
+    <body>
+        <main>
+            <h1>
+                <img
+                    src="favicon.svg"
+                    alt=""
+                    style="height: 1em; vertical-align: text-bottom"
+                />
+                Recursion Schemes
+            </h1>
+
+            <p>
+                This is a simple and practical introduction to
+                <a href="https://github.com/passy/awesome-recursion-schemes"
+                    >recursion schemes</a
+                >
+                in functional programming.
+            </p>
+
+            <p>
+                Recursion schemes are higher order functions (<abbr
+                    title="higher order functions"
+                    >HOF</abbr
+                >) that can be used as building blocks for composing recursive
+                algorithms. Recursion schemes separates the recursive part of a
+                recursive algorithm from the actual calculation the same way the
+                functions like <code>Array.map</code> separate the the
+                <em>iteration</em> part from the calculation that should be done
+                on each element.
+            </p>
+
+            <p>
+                This article will be guiding you through a thought process to
+                understanding recursion schemes by inventing them yourself.
+            </p>
+
+            <h2>
+                Recap: Higher Order Functions &mdash; <code>for</code> vs
+                <code>map</code>
+            </h2>
+
+            <p>
+                Before we start lets revisit a well known higher order function:
+                <code>map</code>. Originally rooted in functional programming,
+                nowadays it is commonly used in imperative and object oriented
+                programming languages as well. It allows to express an
+                element-wise operation over some container object, like over a
+                list or array of elements.
+            </p>
+
+            <p>
+                Take a look at the following two example functions. The first
+                one iterates over an array to multiply each element by two,
+                collecting the results in a new array.
+            </p>
+
+            <figure>
+                <script
+                    type="text/javascript+notebook-cell"
+                    data-autorun="true"
+                >
+                    function doubleEachElementIteratively(array) {
+                    	let result = []
+
+                    	for (var i = 0; i < array.length; i++) {
+                    		result.push(array[i] * 2)
+                    	}
+
+                    	return result
+                    }
+
+                    console.log(doubleEachElementIteratively([1,2,3]))
+                </script>
+                <figcaption>
+                    <strong>Example:</strong> doubling each element of an array
+                    via explicit iteration
+                </figcaption>
+            </figure>
+
+            <p>
+                The next one achieves the same result but splits the task of
+                iteration and the task of element-wise calculation into two
+                separate functions. The function doing the interation and
+                collecting the resulting values is called <code>arrayMap</code>,
+                or typically just <code>map</code>.
+            </p>
+
+            <figure>
+                <script
+                    type="text/javascript+notebook-cell"
+                    data-autorun="true"
+                >
+
+                    export function arrayMap(fn, array) {
+                    	let result = []
+
+                    	for (var i = 0; i < array.length; i++) {
+                    		result.push(fn(array[i]))
+                    	}
+
+                    	return result
+                    }
+
+                    function doubleEachElementMapped(array) {
+                    	return arrayMap((el) => el  * 2, array)
+                    }
+
+                    console.log(doubleEachElementMapped([1,2,3]))
+                </script>
+                <figcaption>
+                    <strong>Example:</strong> doubling each element of an array
+                    via the higher order <code>map</code> function
+                </figcaption>
+            </figure>
+
+            <p>
+                There are many advantages of separating the iteration from the
+                element-wise calculation. The most obvious advantage is that the
+                iteration has only to be defined once and can be reused for
+                various different operations:
+            </p>
+
+            <figure>
+                <script
+                    type="text/javascript+notebook-cell"
+                    data-autorun="true"
+                >
+                    console.log("Tripling:", arrayMap((el) => el  * 3, [1,2,3]))
+                    console.log("Incrementing:", arrayMap((el) => el + 1, [1,2,3]))
+                    console.log("Checking oddness:", arrayMap((el) => el % 2 == 1, [1,2,3]))
+                </script>
+                <figcaption>
+                    <strong>Example:</strong> Various elementwise
+                    transformations of an array
+                </figcaption>
+            </figure>
+
+            <p>
+                Another advantage is that the intentions and invariants of the
+                task are expressed more clearly and explcitly.Applying the
+                <code>map</code> function will not change the number of elements
+                in the array and it will not change the order of the elements.
+            </p>
+            <p>
+                A third advantage of this conceptual separation is to abstract
+                away the specific iteration stragegy, like the specific usage of
+                a
+                <code>for</code> loop (vs a <code>while</code> loop or some
+                other iteration logic). It allowes for later changes and
+                optimizations. For example the internal iteration order could be
+                reversed or even parallelized without effecting the observable
+                result:
+            </p>
+
+            <figure>
+                <script
+                    type="text/javascript+notebook-cell"
+                    data-autorun="true"
+                >
+
+                    export function arrayMap(fn, array) {
+                    	let result = []
+
+                    	// iterating from back to front
+                    	for (var i = array.length-1; i >= 0; i--) {
+                    		result.unshift(fn(array[i]))
+                    	}
+
+                    	return result
+                    }
+
+                    console.log("Tripling:", arrayMap((el) => el  * 3, [1,2,3]))
+                    console.log("Incrementing:", arrayMap((el) => el + 1, [1,2,3]))
+                    console.log("Checking oddness:", arrayMap((el) => el % 2 == 1, [1,2,3]))
+                </script>
+                <figcaption>
+                    <strong>Example:</strong> doubling each element of an array
+                    via the higher order <code>map</code> function
+                </figcaption>
+            </figure>
+
+            <p>
+                The fourht advantage is that the same concept of applying an
+                element-wise transformation can be implemented for other
+                containers of elements. For example for a binary tree as the one
+                below:
+            </p>
+
+            <figure>
+                <script
+                    type="text/javascript+notebook-cell"
+                    data-autorun="true"
+                >
+                    export const simpleBinaryTree = {
+                    	left: {left: {value: 2} , right: {value: 3}},
+                    	right: {left: {value: 5} , right: {left: {value: 2} , right: {value: 3}}}
+                    }
+                </script>
+                <figcaption>
+                    <strong>Example:</strong> a simple binary tree structure,
+                    containing values in its leef
+                </figcaption>
+            </figure>
+
+            <p>A corresponding map function could be implemented as follows:</p>
+
+            <figure>
+                <script
+                    type="text/javascript+notebook-cell"
+                    data-autorun="true"
+                >
+                    export function mapTree(fn, tree) {
+                    	if(tree.value) {
+                    		return {value: fn(tree.value)}
+                    	} else {
+                    		return {
+                    			left: mapTree(fn, tree.left),
+                    			right: mapTree(fn, tree.right)
+                    		}
+                    	}
+                    }
+                </script>
+                <figcaption>
+                    <strong>Example:</strong> a simple implementation of
+                    <code>mapTree</code>
+                </figcaption>
+            </figure>
+
+            <p>
+                Then we coule use the <code>mapTree</code> function in the same
+                way (except for the name) as we did with the
+                <code>mapArray</code> function before to transform each element
+                in the tree:
+            </p>
+
+            <figure>
+                <script
+                    type="text/javascript+notebook-cell"
+                    data-autorun="true"
+                >
+                    console.log("original tree", simpleBinaryTree)
+                    console.log("doubling", mapTree(el => el * 2, simpleBinaryTree))
+                    console.log("check oddness", mapTree(el => el % 2 == 1, simpleBinaryTree))
+                </script>
+                <figcaption>
+                    <strong>Example:</strong> a simple implementation of
+                    <code>mapTree</code>
+                </figcaption>
+            </figure>
+
+            <p>
+                Now we have seen that separating the
+                <em>stepping</em> from the <em>work to do at each step</em>
+                is a powerful tool when doing work with each element in a data
+                structure.
+            </p>
+
+            <h2>Recursive data structures</h2>
+
+            <p>
+                With the binary tree in the example above we have seen that the
+                corresponding <code>map</code> function allowes us to work with
+                a recursive data structure without re-implementing the recursive
+                walking part our self each time.
+            </p>
+
+            <p>
+                But by the nature of the <code>map</code> function we were
+                constraint to modify each value of the tree separately. At each
+                step in the callback function we only have access to one element
+                of the tree, not to its parents or children or other parts of
+                the tree. What if we want to do actual tree-related calculations
+                but still package the <em>walking the tree</em> part into a
+                neatly reusable function?
+            </p>
+
+            <p>
+                Lets take a look at a few typical cases to see if we can
+                recognize some pattern. Say we want to determine the
+                <strong>height of the tree</strong>,
+                <strong>count the leafs</strong> of the tree,
+                <strong>count the total number of nodes</strong>,
+                <strong>find the minimum</strong> value inside the tree and
+                <strong>find the maximum</strong> value inside the tree. We also
+                want to serialize our tree into a string, for better readability
+            </p>
+
+            <p>
+                Lets first implement one function for each of our goals by hand.
+                Afterwards we will try to find similaries in the recursion
+                structure and come up with a general reusable solution.
+            </p>
+
+            <p>
+                For the maximum tree height, at each node we calculate the
+                height of both children and take their maximum:
+            </p>
+            <figure>
+                <script
+                    type="text/javascript+notebook-cell"
+                    data-autorun="true"
+                >
+                    function binaryTreeHeight(tree) {
+                    	if(tree.hasOwnProperty('value')) {
+                    		return 1
+                    	} else {
+                    		return Math.max(binaryTreeHeight(tree.left), binaryTreeHeight(tree.right))
+                    	}
+                    }
+
+                    console.log(binaryTreeHeight(simpleBinaryTree))
+                </script>
+                <figcaption><strong>Example:</strong> tree height</figcaption>
+            </figure>
+
+            <p>
+                For the total number of leafs the result is <code>1</code> if
+                the node itself is a leaf. For inner nodes we sum the number of
+                leafs of the left child with the number of leafs of the right
+                child:
+            </p>
+            <figure>
+                <script
+                    type="text/javascript+notebook-cell"
+                    data-autorun="true"
+                >
+                    function binaryTreeLeafCount(tree) {
+                    	if(tree.hasOwnProperty('value')) {
+                    		return 1
+                    	} else {
+                    		return binaryTreeLeafCount(tree.left) +
+                    			binaryTreeLeafCount(tree.right)
+                    	}
+                    }
+
+                    console.log(binaryTreeLeafCount(simpleBinaryTree))
+                </script>
+                <figcaption>
+                    <strong>Example:</strong> tree leaf count
+                </figcaption>
+            </figure>
+
+            <p>
+                For the total node count the do the same as for counting the
+                leafs but also add <code>+1</code> in case of the inner node, to
+                count this node as well.
+            </p>
+            <figure>
+                <script
+                    type="text/javascript+notebook-cell"
+                    data-autorun="true"
+                >
+                    function binaryTreeNodeCount(tree) {
+                    	if(tree.hasOwnProperty('value')) {
+                    		return 1
+                    	} else {
+                    		return 1 + binaryTreeNodeCount(tree.left) +
+                    			binaryTreeNodeCount(tree.right)
+                    	}
+                    }
+
+                    console.log(binaryTreeNodeCount(simpleBinaryTree))
+                </script>
+                <figcaption>
+                    <strong>Example:</strong> tree leaf count
+                </figcaption>
+            </figure>
+
+            <p>
+                For the minimum value stored in a tree (our tree stores values
+                only in its leafs), we take the minimum of either the left or
+                the right child tree. For leaf nodes we just take their value.
+            </p>
+            <figure>
+                <script
+                    type="text/javascript+notebook-cell"
+                    data-autorun="true"
+                >
+                    function binaryTreeMinimumValue(tree) {
+                    	if(tree.hasOwnProperty('value')) {
+                    		return tree.value
+                    	} else {
+                    		return Math.min(
+                    			binaryTreeMinimumValue(tree.left),
+                    			binaryTreeMinimumValue(tree.right)
+                    		)
+                    	}
+                    }
+
+                    console.log(binaryTreeMinimumValue(simpleBinaryTree))
+                </script>
+                <figcaption>
+                    <strong>Example:</strong> tree minimum value
+                </figcaption>
+            </figure>
+
+            <p>
+                For the maximum value stored in a tree (our tree stores values
+                only in its leafs), we do the same as for the minimum value, but
+                taking the maximum of two children:
+            </p>
+            <figure>
+                <script
+                    type="text/javascript+notebook-cell"
+                    data-autorun="true"
+                >
+                    function binaryTreeMaximumValue(tree) {
+                    	if(tree.hasOwnProperty('value')) {
+                    		return tree.value
+                    	} else {
+                    		return Math.max(
+                    			binaryTreeMaximumValue(tree.left),
+                    			binaryTreeMaximumValue(tree.right)
+                    		)
+                    	}
+                    }
+
+                    console.log(binaryTreeMaximumValue(simpleBinaryTree))
+                </script>
+                <figcaption>
+                    <strong>Example:</strong> tree maxiumum value
+                </figcaption>
+            </figure>
+
+            <p>
+                For turning the Tree into a string the concat the stringified
+                left child to the stringified right child. For leaf nodes we
+                turn the value stored in the node into a string. We also append
+                some parenthisis to reflect the tree structure in the string.
+            </p>
+            <figure>
+                <script
+                    type="text/javascript+notebook-cell"
+                    data-autorun="true"
+                >
+                    function binaryTreeToString(tree) {
+                    	if(tree.hasOwnProperty('value')) {
+                    		return "["+tree.value+"]"
+                    	} else {
+                    		return "("+(
+                    			binaryTreeToString(tree.left) +":"+
+                    			binaryTreeToString(tree.right)
+                    		)+")"
+                    	}
+                    }
+
+                    console.log(binaryTreeToString(simpleBinaryTree))
+                </script>
+                <figcaption>
+                    <strong>Example:</strong> tree to string
+                </figcaption>
+            </figure>
+
+            <p>
+                All the implementations above look very similar. All of them
+                check if the current node we are looking at is a leaf (i.e. has
+                a <code>value</code> property). If so, a base case result is
+                returned, either a constant or a some other value based only on
+                the value stored in the leaf. If on the other hand the current
+                node is an inner node, two recursive function calls are invoked
+                (one for the left and one for the right branch of the tree) and
+                then their result is combined in a speicific way.
+            </p>
+
+            <p>
+                <strong
+                    >This pattern of similarity between these function is what
+                    we are after. Such a recognizable pattern in recursive
+                    algorithms is what is called a recursion scheme.</strong
+                >
+                This speicific pattern that we just recognized and described is
+                one specific recursion scheme that later get a specific name.
+            </p>
+            <p>
+                Lets try to extract this pattern of recursive function calls
+                into a common function, similar to our
+                <code>map</code> function. We take one of the function
+                definitions above and try to move all the specific calculations
+                into functions parameters to be passed in later:
+            </p>
+
+            <figure>
+                <script
+                    type="text/javascript+notebook-cell"
+                    data-autorun="true"
+                >
+                    export function binaryTreeReduce(handleLeaf, handleBranch, tree) {
+                    	if(tree.hasOwnProperty('value')) {
+                    		return handleLeaf(tree.value)
+                    	} else {
+                    		return handleBranch(
+                    			binaryTreeReduce(handleLeaf, handleBranch, tree.left),
+                    			binaryTreeReduce(handleLeaf, handleBranch, tree.right)
+                    		)
+                    	}
+                    }
+                </script>
+                <figcaption>
+                    <strong>Example:</strong> generic binary tree reduction
+                </figcaption>
+            </figure>
+
+            <p>
+                Instead of hardcoding
+                <em>what to do with the leaf nodes</em> and
+                <em
+                    >how exactly the recursive results for the two branches are
+                    to be combined</em
+                >
+                , we accept two callback functions: <code>handleLeaf</code> is
+                called with the value stored in each leaf (similar to
+                <code>fn</code> in our <code>treeMap</code> function before) and
+                <code>handleBranch</code> is called with the two results from
+                both of the recursive calls.
+            </p>
+
+            <p>
+                Now be can express all of our different tree-based calculations
+                from above in terms of our new
+                <code>binaryTreeReduce</code> function:
+            </p>
+
+            <figure>
+                <script
+                    type="text/javascript+notebook-cell"
+                    data-autorun="true"
+                >
+                    console.log("Height", binaryTreeReduce(
+                        // return 1 for leafs
+                    	(v) => 1,
+                        // take the maximum of the children
+                        (l, r) => Math.max(l, r),
+                    	simpleBinaryTree
+                    ))
+                    console.log("LeafCount", binaryTreeReduce(
+                        // return 1 for leafs
+                    	(v) => 1,
+                        // sum the children results
+                        (l, r) => (l + r),
+                    	simpleBinaryTree
+                    ))
+                    console.log("NodeCount", binaryTreeReduce(
+                        // return 1 for leafs
+                     	(v) => 1,
+                        // sum the children and add 1 to also count the inner node
+                        (l, r) => (1 + l + r),
+                    	simpleBinaryTree
+                    ))
+                    console.log("MinimumValue", binaryTreeReduce((v) => v, (l, r) => Math.min(l,r), simpleBinaryTree))
+                    console.log("MaximumValue", binaryTreeReduce((v) => v, (l, r) => Math.max(l,r), simpleBinaryTree))
+                    console.log("ToString", binaryTreeReduce((v) => "["+v+"]", (l, r) => "("+l+":"+r+")", simpleBinaryTree))
+                </script>
+                <figcaption>
+                    <strong>Example:</strong> application of
+                    <code>binaryTreeReduce</code>
+                </figcaption>
+            </figure>
+
+            <p>
+                <strong>That worked great!</strong> We have successfully
+                abstracted the recursion into a single
+                <code>binaryTreeReduce</code> function. Are we done yet? Have we
+                mastered the recursion scheme? Almost, but we are not quite
+                there yet.
+            </p>
+
+            <h2>Other recursive data structures</h2>
+
+            <p>
+                The <code>binaryTreeReduce</code> function does work for our
+                <em>binary tree</em> but what if we have other recursive data
+                structures we want to work with? For example linked lists, trees
+                with more or less than exactly two branches or trees with values
+                stored on the inner nodes as well?
+            </p>
+
+            <p>
+                It would be nice if we could come up with a <em>single</em>
+                <code>recursiveReduce</code> function that works the same for
+                all of these structures, the same way that the interface of a
+                <code>map(fn, collection)</code> functions works for both lists,
+                arrays, trees and other collections (more preciseley
+                <a
+                    href="https://wiki.haskell.org/index.php?title=Functor"
+                    title="Functors"
+                >
+                    functors</a
+                >)
+            </p>
+
+            <p>
+                Lets write down some of the recursive data structures we want to
+                work with and start from there:
+            </p>
+
+            <p>Trees with values store in both leafs and inner nodes:</p>
+            <figure>
+                <script
+                    type="text/javascript+notebook-cell"
+                    data-autorun="true"
+                >
+                    export const simpleBinaryTreeWithInnerValues = {
+                    	value: 6,
+                    	left: {value: 8, left: {value: 2} , right: {value: 3}},
+                    	right: {value: 9, left: {value: 5} , right: {value: 10, left: {value: 2} , right: {value: 3}}}
+                    }
+                </script>
+                <figcaption>
+                    <strong>Example:</strong> binary tree with value on inner
+                    nodes
+                </figcaption>
+            </figure>
+
+            <p>Singly-Linked lists</p>
+            <figure>
+                <script
+                    type="text/javascript+notebook-cell"
+                    data-autorun="true"
+                >
+                    export const simpleLinkedList = {
+                    	head: 6,
+                    	tail: {
+                    		head: 8,
+                    		tail: {
+                    			head: 3,
+                    			tail: {
+                    				head: 5,
+                    				tail: {nil: true}
+                    			}
+                    		}
+                    	}
+                    }
+                </script>
+                <figcaption>
+                    <strong>Example:</strong> binary tree with value on inner
+                    nodes
+                </figcaption>
+            </figure>
+
+            <p>Binary Trees with empty leaf nodes:</p>
+            <figure>
+                <script
+                    type="text/javascript+notebook-cell"
+                    data-autorun="true"
+                >
+                    export const simpleBinaryTreeWithEmptyNodes = {
+                    	value: 6,
+                    	left: {
+                    		value: 8,
+                    		left: {nil: true} ,
+                    		right: {value: 3}
+                    	},
+                    	right: {
+                    		value: 9,
+                    		left: {nil: true},
+                    		right: {
+                    			value: 10,
+                    			left: {nil: true},
+                    			right: {value: 3}
+                    		}
+                    	}
+                    }
+                </script>
+                <figcaption>
+                    <strong>Example:</strong> binary tree with empty nodes
+                </figcaption>
+            </figure>
+
+            <p>
+                Our next goal is again to recognize a pattern between all these
+                structures that can then be generalized. Lets try to implement
+                the function to find the minimum element of each of these three
+                structures. Afterwards we try to see a common pattern in each of
+                the three implementations:
+            </p>
+
+            <figure>
+                <script
+                    type="text/javascript+notebook-cell"
+                    data-autorun="true"
+                >
+                    export function binaryTreeInnerValuesMinimum(tree) {
+                    	if(tree.hasOwnProperty('value')) {
+                            // The minimum value of the leaf is just the stored value
+                    		return tree.value
+                    	} else {
+                            // The minimum value of an inner node is either the value stored at this node
+                            // or the minimum of one of its children
+                    		return Math.min(
+                    			tree.value,
+                    			binaryTreeInnerValuesMinimum(tree.left),
+                    			binaryTreeInnerValuesMinimum(tree.right)
+                    		)
+                    	}
+                    }
+
+
+                    console.log("minimum", binaryTreeInnerValuesMinimum(simpleBinaryTreeWithInnerValues))
+                </script>
+                <figcaption>
+                    <strong>Example:</strong> finding the minimum of a binary
+                    tree with inner values
+                </figcaption>
+            </figure>
+
+            <figure>
+                <script
+                    type="text/javascript+notebook-cell"
+                    data-autorun="true"
+                >
+                    export function linkedListMinimum(fallback, list) {
+                    	if(list.hasOwnProperty('nil')) {
+                            // Since a linked list can be empty we need to handle this fallback
+                            // case as well
+                    		return fallback
+                    	} else {
+                            // For a non empty list the minimum is either the the value stored
+                            // in the head position or the minimum of the tail.
+                    		return Math.min(
+                    			list.head,
+                    			linkedListMinimum(fallback, list.tail)
+                    		)
+                    	}
+                    }
+                    console.log("minimum", linkedListMinimum(Infinity, simpleLinkedList))
+                </script>
+                <figcaption>
+                    <strong>Example:</strong> finding the minimum of a linked
+                    list
+                </figcaption>
+            </figure>
+
+            <figure>
+                <script
+                    type="text/javascript+notebook-cell"
+                    data-autorun="true"
+                >
+                    export function binaryTreeWithEmptyNodesMinimum(fallback, tree) {
+                      // For a tree with maybe empty nodes we have to check 3 cases
+                    	if(tree.hasOwnProperty('nil')) {
+                            // A node with no value can not have a minimum value
+                            // so we have to take the fallback value, similar to an
+                            // empty linked list
+                    		return fallback
+                    	} else if(tree.hasOwnProperty('left') && tree.hasOwnProperty('right')) {
+                            // An inner node has a value
+                            // So the minimum can be either its own value or the minimum
+                            // of one of its two children
+                    		return Math.min(
+                    			tree.value,
+                    			binaryTreeWithEmptyNodesMinimum(fallback, tree.left),
+                    			binaryTreeWithEmptyNodesMinimum(fallback, tree.right)
+                    		)
+                    	} else {
+                            // If the leaf node is not empty
+                            // its value is its own minumum
+                    		return tree.value
+                    	}
+                    }
+
+                    console.log("minimum", binaryTreeWithEmptyNodesMinimum(Infinity, simpleBinaryTreeWithEmptyNodes))
+                </script>
+                <figcaption>
+                    <strong>Example:</strong> finding the minimum of a binary
+                    tree with maybe empty nodes
+                </figcaption>
+            </figure>
+
+            <p>
+                We can observe that each of theses functions differ in the
+                number of branches, depending on the structure of the recursive
+                data structure. For the linked list we need only two branches,
+                one for the nil case at the end of the list and one for the case
+                of list having a head. For the binary tree with either an inner
+                node with left/right children or an empty node or a leaf node
+                with a single value, the recursive function needs to handle each
+                of the three conditions.
+            </p>
+
+            <p>
+                Also the number of arguments of the functions vary. For the tree
+                that contains at least one leaf node with a value we do not need
+                a fallback value. But for the other two structures we need a
+                fallback value to return in case the structure itself does not
+                contain any value that could be used as result.
+            </p>
+
+            <p>
+                <strong
+                    >How could we possibly unify all three of these functions
+                    into a common interface?</strong
+                >
+                Lets take it slowly and first implement a generic function for
+                each of the structures individually again, as we did with
+                <code>binaryTreeReduce</code> for the simple binary tree above:
+            </p>
+
+            <p>
+                For processing the binary tree we accept two callbacks: one for
+                handling the leaf and one for handling the inner node
+            </p>
+            <figure>
+                <script
+                    type="text/javascript+notebook-cell"
+                    data-autorun="true"
+                >
+
+                    export function binaryTreeInnerValuesReduce(handleLeaf, handleInner, tree) {
+                    	if(tree.hasOwnProperty('value')) {
+                    		return handleLeaf(tree.value)
+                    	} else {
+                    		return handleInner(
+                    			tree.value,
+                    			binaryTreeInnerValuesMinimum(handleLeaf, handleInner, tree.left),
+                    			binaryTreeInnerValuesMinimum(handleLeaf, handleInner, tree.right)
+                    		)
+                    	}
+                    }
+
+
+                    console.log("minimum", binaryTreeInnerValuesReduce((v) => v, (v,l,r) => Math.min(v, l, r), simpleBinaryTreeWithInnerValues))
+                </script>
+                <figcaption>
+                    <strong>Example:</strong> generic reduction of a binary tree
+                    with inner values
+                </figcaption>
+            </figure>
+
+            <p>
+                For processing the linked list we also accept two callbacks: one
+                for handling the empty case and one for handling a head. Notice
+                that for handling the fallback case of an empty list we will
+                provide it as function returning a constant instead of a
+                constant itself. This is for consistency reasons.
+            </p>
+            <figure>
+                <script
+                    type="text/javascript+notebook-cell"
+                    data-autorun="true"
+                >
+                    export function linkedListReduce(handleEmpty, handleInner, list) {
+                    	if(list.hasOwnProperty('nil')) {
+                            // handleEmpty is still a function that must be called, not a constant value
+                    		return handleEmpty()
+                    	} else {
+                    		return handleInner(
+                    			list.head,
+                    			linkedListReduce(handleLeaf, handleInner, list.tail)
+                    		)
+                    	}
+                    }
+                    console.log("minimum", linkedListReduce(() => Infinity, (l,r) => Math.min(l,r), simpleLinkedList))
+                </script>
+                <figcaption>
+                    <strong>Example:</strong> generic reduction of a linked list
+                </figcaption>
+            </figure>
+
+            <p>
+                For the tree with maybe empty nodes we had to consider three
+                cases and accordingly accept three different callback functions
+                to handle them. Same as with the linked list we model the
+                fallback value for the empty case as callback function as well.
+            </p>
+            <figure>
+                <script
+                    type="text/javascript+notebook-cell"
+                    data-autorun="true"
+                >
+                    export function binaryTreeWithEmptyNodesReduce(handleEmpty, handleLeaf, handleInner, tree) {
+                    	if(tree.hasOwnProperty('nil')) {
+                    		return handleEmpty()
+                    	} else if(tree.hasOwnProperty('left') && tree.hasOwnProperty('right')) {
+                    		return handleInner(
+                    			tree.value,
+                    			binaryTreeWithEmptyNodesReduce(handleEmpty, handleLeaf, handleInner, tree.left),
+                    			binaryTreeWithEmptyNodesReduce(handleEmpty, handleLeaf, handleInner, tree.right)
+                    		)
+                    	} else {
+                    		return handleLeaf(tree.value)
+                    	}
+                    }
+
+                    console.log("minimum", binaryTreeWithEmptyNodesReduce(() => Infinity, v=>v, (v,l,r) => Math.min(v, l, r), simpleBinaryTreeWithEmptyNodes))
+                </script>
+                <figcaption>
+                    <strong>Example:</strong> generic reduction of a binary tree
+                    with maybe empty nodes
+                </figcaption>
+            </figure>
+
+            <p>
+                Now we can see even more cleary that the number of needed
+                <code>handle</code>-callbacks for each reduction vary and that
+                even the number of argument each of these
+                <code>handle</code>-callback takes, varies. For example
+                <code>handleEmpty</code> takes now arguments but
+                <code>handleInner</code> for one of the trees may take 3.
+            </p>
+            <p>
+                At a first glance it does not seem possible to unify the
+                arguments of these different reudction function into a single
+                generic function that works for both lists, trees and other
+                recursive data strutures.
+                <strong>Now comes the brilliant idea:</strong>
+            </p>
+            <p>
+                But what if we could merge all the callbacks into a single
+                callback function and leave it for this function to handle each
+                possible case correctly? Lets try:
+            </p>
+
+            <figure>
+                <script
+                    type="text/javascript+notebook-cell"
+                    data-autorun="true"
+                >
+                    // Now only one callback function (handleCases) is expected
+                      export function binaryTreeInnerValuesReduce(handleCases, tree) {
+                      	if(tree.hasOwnProperty('value')) {
+                              // for leaf nodes, handleCases is called with with value as argument
+                      		return handleCases({value: tree.value})
+                      	} else {
+                              // For inner nodes handleCases is called with both the value and the
+                              // recursion results of the left and right children.
+                      		return handleCases({
+                      			value: tree.value,
+                      			left: binaryTreeInnerValuesMinimum(handleCases, tree.left),
+                      			right: binaryTreeInnerValuesMinimum(handleCases, tree.right)
+                      		})
+                      	}
+                      }
+
+
+                      console.log("minimum", binaryTreeInnerValuesReduce((c) => {
+                        // Inside the callback we must check for which case the callback had been
+                        // applied
+                      	if(c.left && c.right) {
+                            // For the inner case we return the minimum as result
+                      		return Math.min(c.value, c.left, c.right)
+                      	} else {
+                            // for the leaf case we return the value that we have been given
+                      		return c.value
+                      	}
+                      }, simpleBinaryTreeWithInnerValues))
+                </script>
+                <figcaption>
+                    <strong>Example:</strong> generic reduction of a binary tree
+                    with inner values
+                </figcaption>
+            </figure>
+
+            <figure>
+                <script
+                    type="text/javascript+notebook-cell"
+                    data-autorun="true"
+                >
+                    // Now only one callback function (handleCases) is expected
+                    export function linkedListReduce(handleCases, list) {
+                    	if(list.hasOwnProperty('nil')) {
+                            // for the empty case the callback is called with a constant nil object.
+                    		return handleCases({nil: true})
+                    	} else {
+                            // In the other case both the head value
+                            // and the recursion result of the tail are passed
+                            // to the callback
+                    		return handleCases({
+                    			head: list.head,
+                    			tail: linkedListReduce(handleCases, list.tail)
+                    		})
+                    	}
+                    }
+                    console.log("minimum", linkedListReduce((c) => {
+                        // when called in the empty case
+                    	if (c.nil) {
+                            // we return the constant fallback
+                    		return Infinity
+                    	} else {
+                            // when called for the head case we return either the head value
+                            // or the (already calculated) minimum of the tail
+                    		return Math.min(c.head, c.tail)
+                    	}
+                    }, simpleLinkedList))
+                </script>
+                <figcaption>
+                    <strong>Example:</strong> generic reduction of a linked list
+                </figcaption>
+            </figure>
+
+            <figure>
+                <script
+                    type="text/javascript+notebook-cell"
+                    data-autorun="true"
+                >
+                    // Now only one callback function (handleCases) is expected
+                        export function binaryTreeWithEmptyNodesReduce(handleCases, tree) {
+                        	if(tree.hasOwnProperty('nil')) {
+                                // in the empty case a special nil marker is given to the callback
+                        		return handleCases({nil: true})
+                        	} else if(tree.hasOwnProperty('left') && tree.hasOwnProperty('right')) {
+                                // in the inner node case three values are given to the callback:
+                                // the value stored in the node and the results
+                                // of the recursion for the left and the right child
+                        		return handleCases({
+                        			value: tree.value,
+                        			left: binaryTreeWithEmptyNodesReduce(handleCases, tree.left),
+                        			right: binaryTreeWithEmptyNodesReduce(handleCases, tree.right)
+                        		})
+                        	} else {
+                                // in the leaf case only the value stored in the node
+                                // is given to the callback
+                        		return handleCases({value: tree.value})
+                        	}
+                        }
+
+                        console.log("minimum", binaryTreeWithEmptyNodesReduce((c => {
+                        	if(c.empty) {
+                                // in the empty case the callback returns the fallback
+                        		return Infinity
+                        	} else if(c.left && c.right) {
+                                // For the inner node case the callback returns the minimum of the
+                                // three values in question
+                        		return Math.min(c.value, c.left,c.right)
+                        	} else {
+                                // for the leaf case the callback returns the value it was given
+                        		return c.value
+                        	}
+                        }), simpleBinaryTreeWithEmptyNodes))
+                </script>
+                <figcaption>
+                    <strong>Example:</strong> generic reduction of a binary tree
+                    with maybe empty nodes
+                </figcaption>
+            </figure>
+
+            <p>
+                Did you notice what we did here? We merged all the callback
+                functions into a single <code>handleCases</code> callback that
+                takes only a single value as argument. What what exactly is this
+                argument that we pass to <code>handleCases</code>? It is either
+                an object containing the results of the recusive function calls,
+                or the value store in the leafs of the data structure, in case
+                we hit a base case, or a special marker object in case we are in
+                an empty case.
+            </p>
+
+            <p>
+                <strong>But look again:</strong> the value we pass to
+                <code>handleCases</code> exactly reflects the structure of the
+                node we are currently processing.
+            </p>
+            <p>
+                For example when processing an inner node of a binary tree with
+                inner values (<code>{value, left, right}</code>), we call
+                <code>handleCases({ value, left, right, })</code> with
+                <code>value</code> containing the value in the current node, but
+                <code>left</code> and <code>right</code>
+                <strong>not</strong> containing the sub trees of the original
+                tree, but instead the already calculated results of the two
+                recursive calls.
+            </p>
+
+            <p>
+                What we pass to the <code>handleCases</code> looks structurally
+                exactly like a node of the the tree but, instead of actually
+                containing the recursive structure of the tree, it is just a
+                flat container for the the results of the recursive function
+                calls.
+            </p>
+            <p>
+                For each of our data structures we can think of having actually
+                two different but matching storage structures: One that stores
+                the actual tree and one that stores the result of doing a single
+                recursive calculation step at one tree node. Both look like
+                <code>{value, left, right} | {value}</code> on the surface but
+                differ in their content: The one storing the tree is actually
+                <code
+                    >{value: Number, left: Tree, right: Tree} | {value:
+                    number}</code
+                >
+                and the other, for storing a caculation result, is:
+                <code
+                    >{value: Number, left: Number, right: Number} | {value:
+                    number}</code
+                >.
+            </p>
+
+            <figure>
+                <script
+                    type="text/javascript+notebook-cell"
+                    data-autorun="true"
+                >
+                    // an actual node from the recursive tree structure
+                    const actualInnerTreeNode = {
+                    	value: 5 /*value stored in this node*/,
+                    	left: {/*... left child, being itself a tree node recursively */},
+                    	right: {/*... right child, being itself a tree node recursively */},
+                    }
+
+                    // a container object storing the results of recursive function calls
+                    const recursionResultTreeNode = {
+                    	/* has the same property keys as the actual corresponding tree node */
+                    	value: 5 /*copy of the value stored in the original tree node*/,
+                    	left: 23 /* not a recursive child node, but just the result of the recursive function call on the left child of the original tree node */,
+                    	right: 42 /* not a recursive child node, but just the result of the recursive function call on the right child of the original tree node */,
+                    }
+
+                    // an actual node from the recursive tree structure
+                    const actualTreeLeftNode = {
+                    	value: 5 /*value stored in this node*/,
+                    }
+
+                    // a container object storing the results of recursive function calls
+                    // But this is the base case so it does not store any results
+                    const recursionResultTreeLeftNode = {
+                    	/* has the same property keys as the actual corresponding tree node */
+                    	value: 5 /*copy of the value stored in the original tree node*/,
+                    }
+                </script>
+                <figcaption>
+                    <strong>Example:</strong> comparison between actual
+                    recursive tree nodes and container objects to hold the
+                    recursion results.
+                </figcaption>
+            </figure>
+
+            <p>
+                We kind of came up with a helper structure for passing results
+                around. So by mirroring the structure of the recursive tree
+                nodes we can capture all the results of our recursive function
+                calls an pass it to to our handler function as a single value.
+                The handler function can then inspect in which case of the
+                structure the recursion is currently working in.
+            </p>
+
+            <p>
+                This allows use to define generic recursive functions that work
+                for any recursive data structure as long as for each data
+                structure we carry the corresponding result container around.
+            </p>
+
+            <p>
+                But there is more! Take another look at the each of the
+                <code>handleCases(...)</code> function calls and prepare for one
+                more unifying abstraction. For example this one:
+            </p>
+
+            <figure>
+                <script
+                    type="text/javascript+notebook-cell"
+                    data-autorun="true"
+                >
+                    function binaryTreeWithEmptyNodesReduce(handleCases, tree) {
+                    	if(tree.hasOwnProperty('nil')) { // <-- inspect type of current node
+                    		return handleCases( // <-- call handleCases
+                    			{nil: true} // <-- with flat copy of the node structure
+                    		)
+                    	} else if( // <-- inspect type of current node
+                    		tree.hasOwnProperty('left') && tree.hasOwnProperty('right')
+                    	) {
+                    		return handleCases(// <-- call handleCases
+                    		{
+                    			value: tree.value, // <-- with flat copy of the node structure
+                    			left: // <-- but with the recursive parts replaced by the recursion result
+                    				binaryTreeWithEmptyNodesReduce(handleCases, tree.left),
+                    			right: // <-- but with the recursive parts replaced by the recursion result
+                    				binaryTreeWithEmptyNodesReduce(handleCases, tree.right)
+                    		}
+                    		)
+                    	} else { // <-- inspect type of current node
+                    		return handleCases(// <-- call handleCases
+                    			{value: tree.value}// <-- with flat copy of the node structure
+                    		)
+                    	}
+                    }
+                </script>
+                <figcaption>
+                    <strong>Example:</strong> revisit the
+                    <code>handleCases()</code> function call
+                </figcaption>
+            </figure>
+
+            <p>
+                Wow! All the cases in
+                <code>binaryTreeWithEmptyNodesReduce</code> (and the other
+                <code>...Reduce</code> functions respectively) are following
+                exactly the same structure. The just copy the node, replacing
+                the recursive fields and apply the
+                <code>handleCases</code> function to the now flat copy of the
+                node.
+            </p>
+
+            <p>
+                Could we extract the
+                <em
+                    >make a flat copy of the node and replace the recursive
+                    parts</em
+                >
+                into a separate general function? Yes we can! Take a look:
+            </p>
+
+            <figure>
+                <script
+                    type="text/javascript+notebook-cell"
+                    data-autorun="true"
+                >
+                    function binaryTreeRecursionReplacer(replacer, tree) {
+                    	if(tree.hasOwnProperty('nil')) {
+                    		return {nil: true}
+                    	} else if(
+                    		tree.hasOwnProperty('left') && tree.hasOwnProperty('right')
+                    	) {
+                    		return {
+                    			value: tree.value,
+                    			left: replacer(tree.left),
+                    			right: replacer(tree.right)
+                    		}
+                    	} else {
+                    		return {value: tree.value}
+                    	}
+                    }
+
+                    function binaryTreeReduce(handleCases, tree) {
+                    	return handleCases(
+                    		binaryTreeRecursionReplacer(
+                    			(child) => binaryTreeReduce(handleCases, child), tree)
+                    		)
+                    }
+                </script>
+                <figcaption>
+                    <strong>Example:</strong> splitting
+                    <code>binaryTreeWithEmptyNodesReduce</code> into two
+                    functions: the recursion and the node copying
+                </figcaption>
+            </figure>
+
+            <p>
+                Now look at that! The
+                <code>binaryTreeRecursionReplacer</code> looks almost like our
+                <code>map</code> function from the beginning, but
+                <em>instead of</em> applying the provided function
+                (<code>replacer</code>) to the value stored in a node, the
+                function <em>is applied to the recursive fields</em> (<code
+                    >left</code
+                >
+                and <code>right</code>). So we can think of it as an alternative
+                <strong
+                    >completly different way of mapping over the tree
+                    node.</strong
+                >
+            </p>
+
+            <p>
+                Also look at the <code>binaryTreeReduce</code> function now. It
+                is really short now! The handling of all the cases has been
+                moved into the
+                <code>binaryTreeRecursionReplacer</code> function. What is left
+                in <code>binaryTreeReduce</code> is the pure recursion.
+                <strong>This is our codified recursion scheme! </strong>
+            </p>
+            <p>
+                This specific recursion scheme is called
+                <em>catamorphism</em> because <em>cata</em> is greek for
+                <em>collapsing</em> and what all our functions had in common is
+                that they collapsed the trees or lists they were given into a
+                single value. Yes, <code>Array.reduce</code> is also a
+                catamorphism.
+            </p>
+
+            <p>Lets put everything back together:</p>
+
+            <figure>
+                <script
+                    type="text/javascript+notebook-cell"
+                    data-autorun="true"
+                >
+                    // This function takes a tree and a replacer function
+                    // and replaces the recursive branches of the tree into
+                    // some other values
+                    function binaryTreeMapRecursiveFields(replacer, tree) {
+                    	if(tree.hasOwnProperty('nil')) {
+                    		return {nil: true}
+                    	} else if(
+                    		tree.hasOwnProperty('left') && tree.hasOwnProperty('right')
+                    	) {
+                    		return {
+                    			value: tree.value,
+                    			left: replacer(tree.left),
+                    			right: replacer(tree.right)
+                    		}
+                    	} else {
+                    		return {value: tree.value}
+                    	}
+                    }
+
+                    // This function takes a container
+                    // with precalculated values for any kind of tree node
+                    // and picks the according minimum
+                    const binaryTreeNodeMinimum = c => {
+                    	if(c.nil) {
+                    		return Infinity
+                    	} else if(c.left && c.right) {
+                    		return Math.min(c.value, c.left, c.right)
+                    	} else {
+                    		return c.value
+                    	}
+                    }
+
+                    // thinks function takes the two functions above as callback together with a tree
+                    // and puts everything back together to actually calculate the minimum.
+                    // Node that the two functions above are specifically implemented for
+                    // one kind of tree so the two callbacks and the data passed to this
+                    // must all match
+                    function recursiveReduce(recursiveMapper, handleCase, data) {
+                    	return handleCase(recursiveMapper(
+                    		(child) => recursiveReduce(recursiveMapper, handleCase, child), data))
+                    }
+
+                    // This function is the curried variant of the recursiveReduce function above.
+                    // Its takes a recursiveMapper (for one specific data structure) and an
+                    // handleCases callback (fit for the same recursive data structure)
+                    // And returns a function and expects an intance of such data structure
+                    function cataMorphism(recursiveMapper, handleCase) {
+                    	const curried = (data) => handleCase(recursiveMapper(curried, data))
+
+                    	return curried
+                    }
+
+
+                    console.log("minimum", recursiveReduce(binaryTreeMapRecursiveFields, binaryTreeNodeMinimum, simpleBinaryTreeWithInnerValues))
+
+                    // construct a function for calculating the minimum of a tree from two ingrediants: the treeMapper and the binaryTreeNodeMinimum function
+                    const treeMinimum = cataMorphism(binaryTreeMapRecursiveFields, binaryTreeNodeMinimum)
+
+                    console.log("minimum", treeMinimum(simpleBinaryTreeWithInnerValues))
+                </script>
+                <figcaption>
+                    <strong>Example:</strong> splitting
+                    <code>binaryTreeWithEmptyNodesReduce</code> into two
+                    functions: the recursion and the node copying
+                </figcaption>
+            </figure>
+
+            <h2>To be continued</h2>
+
+            <p>
+                We are not even done yet. The next step is to unify the data
+                structure that stores the tree (<code
+                    >{value, left, right}|{value}</code
+                >) and the structure the stores the recursion result into a
+                single general data structure.
+            </p>
+
+            <h2>References</h2>
+
+            <p>TBD</p>
+        </main>
+        <script>
+            function dedent(text) {
+                const lines = text.split("\n");
+                const indents = lines
+                    .filter((l) => l.trim().length > 0)
+                    .map((l) => l.match(/^\s*/)[0].length);
+
+                const min = Math.min(...indents);
+
+                return lines.map((l) => l.slice(min)).join("\n");
+            }
+            document
+                .querySelectorAll('[type="text/javascript+notebook-cell"]')
+                .forEach((e) => {
+                    e.textContent = dedent(e.textContent);
+                });
+        </script>
+    </body>
 </html>
