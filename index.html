@@ -215,7 +215,7 @@
             </figure>
 
             <p>
-                The fourht advantage is that the same concept of applying an
+                The fourth advantage is that the same concept of applying an
                 element-wise transformation can be implemented for other
                 containers of elements. For example for a binary tree as the one
                 below:
@@ -339,7 +339,7 @@
                     	if(tree.hasOwnProperty('value')) {
                     		return 1
                     	} else {
-                    		return Math.max(binaryTreeHeight(tree.left), binaryTreeHeight(tree.right))
+                    		return 1 + Math.max(binaryTreeHeight(tree.left), binaryTreeHeight(tree.right))
                     	}
                     }
 
@@ -880,7 +880,7 @@
                     	} else {
                     		return handleInner(
                     			list.head,
-                    			linkedListReduce(handleLeaf, handleInner, list.tail)
+                    			linkedListReduce(handleEmpty, handleInner, list.tail)
                     		)
                     	}
                     }
